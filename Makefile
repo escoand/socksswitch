@@ -1,7 +1,7 @@
 #
 # Makefile
 # forward socks5 connections to multiple socks5 proxies on basis of filter rules
-# Copyright (C) 2011  Andreas Schönfelder
+# Copyright (C) 2011-2012  Andreas Schönfelder
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,33 +18,40 @@
 #
 
 # default config
-CXX=gcc
-CXXFLAGS=-O3 -Wall -fmessage-length=0
-LDFLAGS=-Llib -lssh2
-MAIN=socksswitch
+CC		:= gcc
+CCFLAGS		:= -O3 -Wall
+LDFLAGS		:= -lssh2
+DEBUGFLAGS	:= -g -D _DEBUG
+STATICFLAGS	:= -static-libgcc
+BUILDDIR	:= build/
+MAIN		:= socksswitch
+OBJS		:= $(BUILDDIR)main.o $(BUILDDIR)match.o $(BUILDDIR)sockets.o $(BUILDDIR)socks.o $(BUILDDIR)trace.o
 
 # windows config
 ifeq ($(OS), Windows_NT)
-LDFLAGS=-Llib -lssh2 -lws2_32 -lpsapi
-SUFFIX=.exe
+LDFLAGS		:= $(LDFLAGS) -lws2_32 -lpsapi
+MAIN		:= $(MAIN).exe
 endif
 
 all: $(MAIN)
+	
+$(MAIN): $(OBJS)
+	$(CC) -o $(BUILDDIR)$(MAIN) $(OBJS) $(LDFLAGS)
 
-$(MAIN):
-	$(CXX) -orelease/$(MAIN)$(SUFFIX) $(CXXFLAGS) src/*.c $(LDFLAGS)
+$(BUILDDIR)%.o: src/%.c
+	$(CC) -o $@ -c $(CCFLAGS) $<
 
-debug:
-	$(CXX) -orelease/$(MAIN)$(SUFFIX) $(CXXFLAGS) -g -D _DEBUG src/*.c $(LDFLAGS)
+debug: $(OBJS)
+	$(CC) -o $(BUILDDIR)$(MAIN) $(CCFLAGS) $(DEBUGFLAGS) $(OBJS) $(LDFLAGS)
 
-static:
-	$(CXX) -orelease/$(MAIN)$(SUFFIX) $(CXXFLAGS) -static-libgcc -D _DEBUG src/*.c $(LDFLAGS)
+static: $(OBJS)
+	$(CC) -o $(BUILDDIR)$(MAIN) $(CCFLAGS) $(OBJS) $(LDFLAGS) $(STATICFLAGS)
 
-staticdebug:
-	$(CXX) -orelease/$(MAIN)$(SUFFIX) $(CXXFLAGS) -static-libgcc -g -D _DEBUG src/*.c $(LDFLAGS)
+staticdebug: $(OBJS)
+	$(CC) -o $(BUILDDIR)$(MAIN) $(CCFLAGS) $(DEBUGFLAGS) $(OBJS) $(LDFLAGS) $(STATICFLAGS)
 
-upx:
-	upx release/$(MAIN)$(SUFFIX)
+upx: $(MAIN)
+	upx $(BUILDDIR)$(MAIN)
 
 clean:
-	$(RM) release/*.o release/$(MAIN)$(SUFFIX)
+	$(RM) $(BUILDDIR)*.o $(BUILDDIR)$(MAIN)
