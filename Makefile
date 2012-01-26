@@ -17,15 +17,17 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+
 # default config
 CC		:= gcc
-CCFLAGS		:= -O3 -Wall
-LDFLAGS		:= -lssh2
+CCFLAGS		:= -O3 -Wall -Isrc/
+LDFLAGS		:= -Llib/ -lssh2
 DEBUGFLAGS	:= -g -D _DEBUG
 STATICFLAGS	:= -static-libgcc
 BUILDDIR	:= build/
 MAIN		:= socksswitch
 OBJS		:= $(BUILDDIR)main.o $(BUILDDIR)match.o $(BUILDDIR)sockets.o $(BUILDDIR)socks.o $(BUILDDIR)trace.o
+
 
 # windows config
 ifeq ($(OS), Windows_NT)
@@ -33,24 +35,20 @@ LDFLAGS		:= $(LDFLAGS) -lws2_32 -lpsapi
 MAIN		:= $(MAIN).exe
 endif
 
-all: $(MAIN)
-	
-$(MAIN): $(OBJS)
+
+all: $(OBJS)
 	$(CC) -o $(BUILDDIR)$(MAIN) $(OBJS) $(LDFLAGS)
 
 $(BUILDDIR)%.o: src/%.c
 	$(CC) -o $@ -c $(CCFLAGS) $<
 
-debug: $(OBJS)
-	$(CC) -o $(BUILDDIR)$(MAIN) $(CCFLAGS) $(DEBUGFLAGS) $(OBJS) $(LDFLAGS)
+debug:
+CCFLAGS := $(CCFLAGS) $(DEBUGFLAGS)
 
 static: $(OBJS)
-	$(CC) -o $(BUILDDIR)$(MAIN) $(CCFLAGS) $(OBJS) $(LDFLAGS) $(STATICFLAGS)
+	$(CC) -o $(BUILDDIR)$(MAIN) $(OBJS) $(LDFLAGS) $(STATICFLAGS)
 
-staticdebug: $(OBJS)
-	$(CC) -o $(BUILDDIR)$(MAIN) $(CCFLAGS) $(DEBUGFLAGS) $(OBJS) $(LDFLAGS) $(STATICFLAGS)
-
-upx: $(MAIN)
+upx: all
 	upx $(BUILDDIR)$(MAIN)
 
 clean:
