@@ -1,0 +1,579 @@
+/*
+ * main.c 
+ */
+
+#ifdef _WIN32
+#include <winsock.h>
+#else
+#include <sys/socket.h>
+#endif
+#include <stdio.h>
+#include <stdlib.h>
+#include <libssh2.h>
+#include <sys/time.h>
+#include "main.h"
+#include "match.h"
+#include "sockets.h"
+#include "socks.h"
+#include "trace.h"
+
+
+fd_set sockets_set, ssh_set, read_set;
+FORWARD_DESTINATION destinations[32];
+FORWARD_PAIR forwards[32];
+int destinations_count = 0;
+
+
+int main(int argc, char *argv[]) {
+    int rc;
+    unsigned int i, j, masterport, socket_max, newsock;
+    char buf[SOCKET_DATA_MAX], tmp[SOCKET_DATA_MAX];
+    LIBSSH2_CHANNEL *channel;
+    FORWARD_DESTINATION *dst = NULL;
+    char dst_host[256] = "";
+
+    DEBUG;
+
+    /* default */
+    putenv((char *) "TRACE=2");
+
+    /* read params and config */
+    readParams(argc, argv);
+    masterport = readConfig();
+
+    /* init socket handling */
+    socksswitch_init();
+    FD_ZERO(&sockets_set);
+    FD_ZERO(&ssh_set);
+    FD_ZERO(&read_set);
+    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
+	forwards[i].type = 0;
+	forwards[i].left = 0;
+	forwards[i].right = 0;
+	forwards[i].channel = NULL;
+    }
+
+    DEBUG;
+
+    /* init master socket */
+    rc = masterSocket(masterport);
+    if (rc > 0) {
+	FD_SET(rc, &sockets_set);
+	socket_max = rc;
+    } else
+	return 1;
+
+    DEBUG;
+
+    /* init ssh connections */
+    for (i = 0; i < destinations_count; i++) {
+	if (strlen(destinations[i].user) > 0) {
+	    LIBSSH2_SESSION *session = NULL;
+	    rc = sshSocket(destinations[i].host, destinations[i].port,
+			   destinations[i].user,
+			   destinations[i].privkeyfile,
+			   destinations[i].pubkeyfile, &session);
+	    destinations[i].session = session;
+	    FD_SET(rc, &sockets_set);
+	    FD_SET(rc, &ssh_set);
+	}
+    }
+
+    DEBUG;
+
+    /* main loop */
+    for (;;) {
+
+	/* wait for socket actions */
+	read_set = sockets_set;
+	rc = select(socket_max + 1, &read_set, NULL, NULL, 0);
+
+/*#ifdef _DEBUG
+	printf("sockets_set:\n");
+	for (i = 0; i < sockets_set.fd_count; i++)
+	    printf("%i:%i\n", i, sockets_set.fd_array[i]);
+	printf("ssh_set:\n");
+	for (i = 0; i < ssh_set.fd_count; i++)
+	    printf("%i:%i\n", i, ssh_set.fd_array[i]);
+	printf("read_set:\n");
+	for (i = 0; i < read_set.fd_count; i++)
+	    printf("%i:%i\n", i, read_set.fd_array[i]);
+#endif*/
+
+	/* master socket action */
+	if (FD_ISSET(sockets_set.fd_array[0], &read_set)) {
+	    DEBUG;
+
+	    rc = socksswitch_accept(sockets_set.fd_array[0]);
+
+	    /* add new socket */
+	    if (rc > 0) {
+		FD_SET(rc, &sockets_set);
+		if (rc > socket_max)
+		    socket_max = rc;
+	    }
+
+	    continue;
+	}
+
+	/* client socket action */
+	for (i = 0; i < read_set.fd_count; i++) {
+	    memset(buf, 0, SOCKET_DATA_MAX + 1);
+
+	    /* ssh channel action */
+	    if (FD_ISSET(read_set.fd_array[i], &ssh_set)) {
+		DEBUG;
+		int nextsock = 1;
+
+		for (j = 0; j < sizeof(forwards) / sizeof(forwards[0]);
+		     j++) {
+		    if (forwards[j].channel != NULL) {
+			rc = socksswitch_ssh_recv(&forwards[i].channel,
+						  buf);
+
+			if (rc == 0)
+			    continue;
+
+			else if (rc > 0) {
+			    nextsock = 0;
+			    forward(0, forwards[j].channel, buf, rc);
+			}
+
+			else if (rc < 0) {
+			    nextsock = 0;
+			    libssh2_channel_eof(forwards[j].channel);
+			    forwards[j].type = FORWARD_TYPE_NONE;
+			    forwards[j].left = 0;
+			    forwards[j].right = 0;
+			    forwards[j].channel = NULL;
+			    FD_CLR(read_set.fd_array[i], &ssh_set);
+			}
+		    }
+		}
+
+		if (!nextsock)
+		    break;
+	    }
+
+	    /* get new data */
+	    rc = socksswitch_recv(read_set.fd_array[i], buf);
+
+	    /* socket closed or error */
+	    if (rc <= 0) {
+		DEBUG;
+		cleanEnd(read_set.fd_array[i]);
+	    }
+
+	    /* socks5 handshake */
+	    else if (rc == 3 && memcmp(buf, "\x05\x01\x00", 3) == 0) {
+		DEBUG;
+		rc = socksswitch_send(read_set.fd_array[i], "\x05\x00", 2);
+		if (rc < 0)
+		    cleanEnd(rc);
+	    }
+
+	    /* socks5 request */
+	    else if (rc > 3 && memcmp(buf, "\x05\x01\x00", 3) == 0) {
+
+		/* testing filters */
+		if (!matchFilter(&dst, buf, rc)) {
+		    DEBUG;
+		    cleanEnd(read_set.fd_array[i]);
+		    continue;
+		}
+
+		/* ssh forwarding */
+		if (dst->session) {
+		    DEBUG;
+		    getSocksReqHost(dst_host, buf, rc);
+
+		    TRACE_INFO("connect through %s:%i to %s:%i\n",
+			       dst->host, dst->port, dst_host,
+			       getSocksReqPort(buf, rc));
+		    channel =
+			libssh2_channel_direct_tcpip(dst->session,
+						     dst_host,
+						     getSocksReqPort(buf,
+								     rc));
+
+		    /* connected */
+		    if (channel != NULL) {
+
+			/* add new socket */
+			libssh2_channel_set_blocking(channel, 0);
+			forwardsAdd(FORWARD_TYPE_SSH, read_set.fd_array[i],
+				    0, &channel);
+
+			/* init connection */
+			buf[1] = 0x00;
+			socksswitch_send(read_set.fd_array[i], buf, rc);
+		    }
+
+		    /* error */
+		    else {
+			sshError(dst->session);
+			cleanEnd(read_set.fd_array[i]);
+		    }
+		}
+
+		/* direct forwarding */
+		else {
+		    DEBUG;
+
+		    newsock = clientSocket(dst->host, dst->port);
+
+		    /* connected */
+		    if (newsock > 0) {
+			DEBUG;
+
+			/* add new socket */
+			FD_SET(newsock, &sockets_set);
+			forwardsAdd(FORWARD_TYPE_DIRECT,
+				    read_set.fd_array[i], newsock, NULL);
+
+			/* init connection */
+			if (socksswitch_send
+			    (newsock, "\x05\x01\x00", 3) > 0 &&
+			    socksswitch_recv(newsock, tmp) > 0)
+			    socksswitch_send(newsock, buf, rc);
+		    }
+
+		    /* error */
+		    else {
+			DEBUG;
+			cleanEnd(read_set.fd_array[i]);
+			cleanEnd(newsock);
+		    }
+		}
+	    }
+
+	    /* forwarding */
+	    else if (!forward(read_set.fd_array[i], NULL, buf, rc)) {
+		DEBUG;
+		cleanEnd(read_set.fd_array[i]);
+	    }
+	}
+    }
+}
+
+/* show help */
+void showHelp(char *binary) {
+    printf("%s v%s\n", NAME, VERSION);
+    printf("%s\n", DESC);
+    printf("\n");
+    printf("Usage: %s [OPTION]...\n", binary);
+    printf("\n");
+    printf("  -d         Dump datagram data (huge output).\n");
+    printf("  -h         Display this help message.\n");
+    printf("  -l <file>  Log to <file> instead STDOUT/STDERR.\n");
+    printf("  -qq        Decrease verbosity to QUIET.\n");
+    printf("  -q         Decrease verbosity to ERROR.\n");
+    printf("  -v         Increase verbosity to INFO.\n");
+    printf("  -vv        Increase verbosity to VERBOSE.\n");
+    printf("             (Default verbosity is WARNING)\n");
+    printf("\n");
+    printf("%s\n", RIGHTS);
+}
+
+/* read parameters */
+void readParams(const int argc, char *argv[]) {
+    unsigned int i;
+    char tmp[1025];
+
+    /* read arguments */
+    for (i = 1; i < argc; i++) {
+
+	/* show help */
+	if (strcmp(argv[i], "-h") == 0) {
+	    showHelp(argv[0]);
+	    exit(1);
+	}
+
+	/* logfile */
+	else if (strcmp(argv[i], "-l") == 0) {
+	    sprintf(tmp, "LOGFILE=%s", argv[++i]);
+	    putenv(tmp);
+	}
+
+	/* tacelevel */
+	else if (strcmp(argv[i], "-qq") == 0)
+	    putenv((char *) "TRACE=0");
+	else if (strcmp(argv[i], "-q") == 0)
+	    putenv((char *) "TRACE=1");
+	else if (strcmp(argv[i], "-v") == 0)
+	    putenv((char *) "TRACE=3");
+	else if (strcmp(argv[i], "-vv") == 0)
+	    putenv((char *) "TRACE=4");
+
+	/* dump */
+	else if (strcmp(argv[i], "-d") == 0)
+	    putenv((char *) "DUMP=1");
+
+	/* unsupported argument */
+	else {
+	    showHelp(argv[0]);
+	    exit(1);
+	}
+    }
+}
+
+/* read config file */
+int readConfig() {
+    FILE *cfgfile = NULL;
+    char cfgline[1024];
+    char cfgtype[256];
+    int rc, masterport = 0;
+
+    DEBUG;
+
+    /* open config file */
+    cfgfile = fopen("socksswitch.cfg", "r");
+    if (!cfgfile) {
+	TRACE_ERROR("unable to open config file\n");
+	exit(1);
+    }
+
+    /* read config */
+    while (fgets(cfgline, sizeof(cfgline), cfgfile)) {
+
+	/* skip comments */
+	if (strlen(cfgline) == 1 || memcmp(cfgline, "#", 1) == 0)
+	    continue;
+
+	/* get cfg type */
+	sscanf(cfgline, "%s ", cfgtype);
+
+	/* get master port */
+	if (strcmp(cfgtype, "listen") == 0)
+	    sscanf(cfgline, "%*s %i", &masterport);
+
+	/* get forward conenction */
+	else if (strcmp(cfgtype, "forward") == 0) {
+	    char host[256];
+	    int port;
+	    char user[32];
+	    char privkeyfile[256];
+	    char pubkeyfile[256];
+
+	    /* read forward config */
+	    rc = sscanf(cfgline, "%*s %s %i %s \"%[^\"]\" \"%[^\"]\"",
+			host, &port, user, pubkeyfile, privkeyfile);
+	    if (rc > 0) {
+		strcpy(destinations[destinations_count].host, host);
+		destinations[destinations_count].port = port;
+	    }
+	    if (rc == 2) {
+		strcpy(destinations[destinations_count].user, "");
+		strcpy(destinations[destinations_count].privkeyfile, "");
+		strcpy(destinations[destinations_count].pubkeyfile, "");
+	    } else if (rc == 5) {
+		strcpy(destinations[destinations_count].user, user);
+		strcpy(destinations[destinations_count].privkeyfile,
+		       privkeyfile);
+		strcpy(destinations[destinations_count].pubkeyfile,
+		       pubkeyfile);
+	    }
+	    destinations_count++;
+	}
+
+	/* get filter rules */
+	else if (strcmp(cfgtype, "filter") == 0) {
+	    char filter[256] = "";
+	    rc = sscanf(cfgline, "%*s %s", filter);
+	    strcpy(destinations[destinations_count - 1].filters
+		   [destinations
+		    [destinations_count - 1].filters_count++], filter);
+	}
+    }
+
+    /* close config file */
+    fclose(cfgfile);
+
+    DEBUG;
+
+    return masterport;
+}
+
+/* get matching destination */
+int matchFilter(FORWARD_DESTINATION ** fo, const char *buf, const int len) {
+    unsigned int i, j;
+    char host[256] = "";
+
+    DEBUG;
+
+    getSocksReqHost(host, buf, len);
+
+    for (i = 0; i < destinations_count; i++)
+	for (j = 0; j < destinations[i].filters_count; j++)
+	    if (matching(host, destinations[i].filters[j])) {
+		TRACE_INFO
+		    ("request %s:%i matches filter %s for %s:%i\n",
+		     host, getSocksReqPort(buf, len),
+		     destinations[i].filters[j], destinations[i].host,
+		     destinations[i].port);
+		*fo = &destinations[i];
+		return 1;
+	    }
+
+    TRACE_WARNING("request %s:%i matches no filter\n", host,
+		  getSocksReqPort(buf, len));
+
+    DEBUG;
+
+    return 0;
+}
+
+/* add partners to forward list */
+int forwardsAdd(FORWARD_TYPE type, const int left, const int sock,
+		LIBSSH2_CHANNEL ** channel) {
+    unsigned int i;
+
+    DEBUG;
+
+    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
+	if (forwards[i].left == 0) {
+	    forwards[i].type = type;
+	    forwards[i].left = left;
+	    forwards[i].right = sock;
+	    if (channel != NULL) {
+		forwards[i].channel = *channel;
+		TRACE_VERBOSE
+		    ("forward added (socket:%i channel:%i)\n",
+		     left, channel);
+	    } else
+		TRACE_VERBOSE
+		    ("forward added (socket:%i socket:%i)\n", left, sock);
+
+	    return 1;
+	}
+    }
+
+    TRACE_WARNING("too much forwards\n");
+
+    DEBUG;
+
+    return 0;
+}
+
+/* find a partner to forward data */
+int forward(const int sock, LIBSSH2_CHANNEL * channel, const char *buf,
+	    const int len) {
+    unsigned int i;
+
+    DEBUG;
+
+    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
+
+	/* from local to direct */
+	if (sock > 0 && forwards[i].type == FORWARD_TYPE_DIRECT
+	    && forwards[i].left == sock) {
+
+	    TRACE_VERBOSE
+		("forward to remote (socket:%i to socket:%i)\n",
+		 forwards[i].left, forwards[i].right);
+
+	    if (socksswitch_send(forwards[i].right, buf, len) <= 0)
+		cleanEnd(sock);
+
+	    DEBUG;
+
+	    return 1;
+	}
+
+	/* from local to ssh */
+	else if (sock > 0 && forwards[i].type == FORWARD_TYPE_SSH
+		 && forwards[i].left == sock) {
+
+	    TRACE_VERBOSE
+		("forward to remote (socket:%i to channel:%i)\n",
+		 forwards[i].left, forwards[i].channel);
+
+	    socksswitch_ssh_send(&forwards[i].channel, buf, len);
+
+	    DEBUG;
+
+	    return 1;
+	}
+
+	/* from direct to local */
+	else if (sock > 0 && forwards[i].type == FORWARD_TYPE_DIRECT
+		 && forwards[i].right == sock) {
+
+	    TRACE_VERBOSE
+		("forward to local (socket:%i to socket:%i)\n",
+		 forwards[i].right, forwards[i].left);
+
+	    if (socksswitch_send(forwards[i].left, buf, len) <= 0)
+		cleanEnd(sock);
+
+	    DEBUG;
+
+	    return 1;
+	}
+
+	/* from ssh to local */
+	else if (channel != NULL
+		 && forwards[i].type == FORWARD_TYPE_SSH
+		 && forwards[i].channel == channel) {
+
+	    TRACE_VERBOSE
+		("forward to local (channel:%i to socket:%i)\n",
+		 forwards[i].channel, forwards[i].left);
+
+	    if (socksswitch_send(forwards[i].left, buf, len) <= 0)
+		cleanEnd(sock);
+
+	    DEBUG;
+
+	    return 1;
+	}
+    }
+
+    TRACE_VERBOSE("no forward (socket:%i channel:%i)\n", sock, channel);
+
+    DEBUG;
+
+    return 0;
+}
+
+/* clean shutdown of sockets */
+void cleanEnd(const int sock) {
+    unsigned int i;
+
+    DEBUG;
+
+    /* disconnect forwardings */
+    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
+	if (forwards[i].left == sock || forwards[i].right == sock) {
+
+	    /* close sockets */
+	    if (sock != forwards[i].left && sock > 0) {
+		FD_CLR(forwards[i].left, &sockets_set);
+		FD_CLR(forwards[i].left, &ssh_set);
+		FD_CLR(forwards[i].left, &read_set);
+		socksswitch_close(forwards[i].left);
+	    }
+	    if (sock != forwards[i].right && sock > 0) {
+		FD_CLR(forwards[i].right, &sockets_set);
+		FD_CLR(forwards[i].right, &read_set);
+		socksswitch_close(forwards[i].right);
+	    }
+
+	    /* clear forwards */
+	    forwards[i].type = FORWARD_TYPE_NONE;
+	    forwards[i].left = 0;
+	    forwards[i].right = 0;
+	    forwards[i].channel = NULL;
+	}
+    }
+
+    /* disconnect unforwarded */
+    if (FD_ISSET(sock, &sockets_set)) {
+	FD_CLR(sock, &sockets_set);
+	FD_CLR(sock, &ssh_set);
+	FD_CLR(sock, &read_set);
+	socksswitch_close(sock);
+    }
+
+    DEBUG;
+}
