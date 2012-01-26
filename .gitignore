@@ -1,5 +1,6 @@
-
-/build
-/lib
-/tools
-/socksswitch.cfg
+build/
+lib/
+tools/
+socksswitch.cfg
+*pnproj
+*.pnps
