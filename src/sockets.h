@@ -24,7 +24,7 @@
 #include <libssh2.h>
 
 
-#ifdef _WIN32
+#ifdef WIN32
 #define SOCKET_ADDR_LEN int
 #define SOCKET_DATA_LEN int
 #define SOCKET_ERROR_CODE WSAGetLastError()

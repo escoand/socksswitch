@@ -21,12 +21,16 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#include <libssh2.h>
-
 #define NAME    "socksswitch"
 #define VERSION "20120126"
 #define DESC    "forwards socks connection on basis of filter rules"
 #define RIGHTS  "Copyright (C) 2011-2012 Andreas Schoenfelder"
+
+#ifdef WIN32
+#include <winsock.h>
+#endif
+#include <libssh2.h>
+
 
 typedef struct
 {

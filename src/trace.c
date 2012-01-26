@@ -25,9 +25,9 @@
 #include <stdio.h>
 #include "trace.h"
 
-#ifdef _WIN32
-#include <psapi.h>
+#ifdef WIN32
 #include <windows.h>
+#include <psapi.h>
 #endif
 
 

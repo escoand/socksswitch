@@ -40,7 +40,7 @@
 #define DEBUG
 #endif
 
-#ifdef _WIN32
+#ifdef WIN32
 #define EOL "\n"
 #else
 #define EOL "\n"

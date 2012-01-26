@@ -20,7 +20,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <libssh2.h>
 #include <sys/time.h>
 #include "main.h"
 #include "match.h"
@@ -30,10 +29,16 @@
 
 #ifdef _WIN32
 #include <winsock.h>
-#define READ_SET_SIZE read_set.fd_count
-#define FD_SET_DATA(set, i) (set).fd_count[i]
 #else
 #include <sys/socket.h>
+#endif
+
+#include <libssh2.h>
+
+#if defined WIN32 && !defined MINGW32
+#define READ_SET_SIZE read_set.fd_count
+#define FD_SET_DATA(set, i) (set).fd_array[i]
+#else
 #define READ_SET_SIZE __FD_SETSIZE/__NFDBITS
 #define FD_SET_DATA(set, i) __FDS_BITS(&set)[i]
 #endif

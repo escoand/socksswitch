@@ -24,7 +24,9 @@
 #include "socks.h"
 #include "trace.h"
 
-#ifndef _WIN32
+#ifdef WIN32
+#include <winsock.h>
+#else
 #include <arpa/inet.h>
 #endif
 

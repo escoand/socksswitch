@@ -18,7 +18,7 @@
  */
 
 
-#ifdef _WIN32
+#ifdef WIN32
 #include <winsock.h>
 #include <io.h>
 #else
@@ -43,7 +43,7 @@ socksswitch_init ()
   int rc = 0;
 
   /* init winsock */
-#ifdef _WIN32
+#ifdef WIN32
   WORD wVersionRequested;
   WSADATA wsaData;
 
@@ -71,7 +71,11 @@ void
 socksswitch_addr (const int sock, char *addrstr)
 {
   struct sockaddr_in addr;
+#if defined WIN32 && !defined MINGW32
+  int addrlen = sizeof (struct sockaddr_in);
+#else
   unsigned int addrlen = sizeof (struct sockaddr_in);
+#endif
 
   getpeername (sock, (struct sockaddr *) &addr, &addrlen);
   sprintf (addrstr, "%s:%i", inet_ntoa (addr.sin_addr),
@@ -83,7 +87,11 @@ int
 socksswitch_accept (const int sock)
 {
   struct sockaddr_in addr;
+#if defined WIN32 && !defined MINGW32
+  int addrlen = sizeof (struct sockaddr_in);
+#else
   unsigned int addrlen = sizeof (struct sockaddr_in);
+#endif
   int rc = accept (sock, (struct sockaddr *) &addr, &addrlen);
   char addrstr[256];
 
@@ -126,7 +134,7 @@ socksswitch_recv (const int sock, char *buf)
     }
 
   /* socket closed */
-#ifdef _WIN32
+#ifdef WIN32
   else if (rc == 0 || SOCKET_ERROR_CODE == WSAECONNRESET)
     {
 #else
@@ -491,7 +499,7 @@ void
 socketError ()
 {
   char msg[256] = "";
-#ifdef _WIN32
+#ifdef WIN32
   if (SOCKET_ERROR_CODE != 0)
     FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL, SOCKET_ERROR_CODE,
 		   LANG_SYSTEM_DEFAULT, msg, sizeof (msg), NULL);

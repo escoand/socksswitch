@@ -18,37 +18,51 @@
 
 
 # default config
-CC		:= gcc
-CCFLAGS		:= -O3 -Wall -Isrc/
-LDFLAGS		:= -Llib/ -lssh2
-DEBUGFLAGS	:= -g -D _DEBUG
-STATICFLAGS	:= -static-libgcc
-BUILDDIR	:= build/
-MAIN		:= socksswitch
-OBJS		:= $(BUILDDIR)main.o $(BUILDDIR)match.o $(BUILDDIR)sockets.o $(BUILDDIR)socks.o $(BUILDDIR)trace.o
+CC       ?= gcc
+CCFLAGS   = -O3 -Wall -Isrc/
+LDFLAGS   = -Llib/ -lssh2
+BUILDDIR  = build
+MAIN      = socksswitch
+OBJS      = main.o match.o sockets.o socks.o trace.o
 
 
 # windows config
 ifeq ($(OS), Windows_NT)
-LDFLAGS		:= $(LDFLAGS) -lws2_32 -lpsapi
-MAIN		:= $(MAIN).exe
+LDFLAGS  += -lws2_32 -lpsapi
+MAIN     := $(MAIN).exe
 endif
 
 
-all: $(OBJS)
-	$(CC) -o $(BUILDDIR)$(MAIN) $(OBJS) $(LDFLAGS)
+OBJS     := $(addprefix $(BUILDDIR)/,$(OBJS))
+MAIN     := $(addprefix $(BUILDDIR)/,$(MAIN))
 
-$(BUILDDIR)%.o: src/%.c
+
+debug: CCFLAGS += -g -D_DEBUG -D_DEBUG_
+debug: all
+
+static: LDFLAGS += -static-libgcc
+static: all
+
+mingw32: CC = i586-mingw32msvc-cc
+mingw32: all
+
+
+all: $(MAIN)
+
+$(MAIN): $(OBJS)
+	$(CC) -o $(MAIN) $(OBJS) $(LDFLAGS)
+
+$(BUILDDIR)/%.o: src/%.c
 	$(CC) -o $@ -c $(CCFLAGS) $<
 
-debug:
-#CCFLAGS := $(CCFLAGS) $(DEBUGFLAGS)
+$(OBJS): | $(BUILDDIR)
 
-static: $(OBJS)
-	$(CC) -o $(BUILDDIR)$(MAIN) $(OBJS) $(LDFLAGS) $(STATICFLAGS)
+$(BUILDDIR):
+	mkdir $@
 
-upx: all
-	upx $(BUILDDIR)$(MAIN)
+upx: $(MAIN)
+	upx $(MAIN)
 
 clean:
-	$(RM) $(BUILDDIR)*.o $(BUILDDIR)$(MAIN)
+	$(RM) $(BUILDDIR)/*
+
