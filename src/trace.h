@@ -1,5 +1,20 @@
 /*
- * trace.h
+ *     Copyright (C) 2011-2012 Andreas Schönfelder
+ *     https://github.com/escoand/socksswitch
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
  */
 
 
@@ -32,19 +47,20 @@
 #endif
 
 
-enum TRACE_LEVEL {
-    TRACE_LEVEL_NO,
-    TRACE_LEVEL_ERROR,
-    TRACE_LEVEL_WARNING,
-    TRACE_LEVEL_INFO,
-    TRACE_LEVEL_VERBOSE
+enum TRACE_LEVEL
+{
+  TRACE_LEVEL_NO,
+  TRACE_LEVEL_ERROR,
+  TRACE_LEVEL_WARNING,
+  TRACE_LEVEL_INFO,
+  TRACE_LEVEL_VERBOSE
 };
 
-void trace(const char *, const int,
-	   const char *, enum TRACE_LEVEL, const char *, ...);
-void trace_append(enum TRACE_LEVEL, const char *, ...);
-void trace_dump(const char *, int);
-void trace_memory();
+void trace (const char *, const int,
+	    const char *, enum TRACE_LEVEL, const char *, ...);
+void trace_append (enum TRACE_LEVEL, const char *, ...);
+void trace_dump (const char *, int);
+void trace_memory ();
 
 
-#endif				/* TRACE_H */
+#endif /* TRACE_H */
