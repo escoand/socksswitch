@@ -20,7 +20,7 @@
 # default config
 CC       ?= gcc
 CCFLAGS   = -O3 -Wall -Isrc/
-LDFLAGS   = -Llib/ -lssh2
+LDFLAGS   = -Llib/ -lssh
 BUILDDIR  = build
 MAIN      = socksswitch
 OBJS      = main.o match.o sockets.o socks.o trace.o

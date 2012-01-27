@@ -1,3 +1,4 @@
+
 /*
  *     Copyright (C) 2011-2012 Andreas Schönfelder
  *     https://github.com/escoand/socksswitch
@@ -21,7 +22,7 @@
 #ifndef SOCKETS_H
 #define SOCKETS_H
 
-#include <libssh2.h>
+#include <libssh/libssh.h>
 
 
 #ifdef WIN32
@@ -37,34 +38,31 @@
 #define SOCKET_DATA_MAX 16384
 
 
-typedef enum
-{
-  SOCKET_TYPE_LISTEN,
-  SOCKET_TYPE_CLIENT,
-  SOCKET_TYPE_SOCKS,
-  SOCKET_TYPE_SSH
+typedef enum {
+    SOCKET_TYPE_LISTEN,
+    SOCKET_TYPE_CLIENT,
+    SOCKET_TYPE_SOCKS,
+    SOCKET_TYPE_SSH
 } SOCKET_TYPE;
 
-int socksswitch_init ();
-void socksswitch_addr (const int, char *);
-int socksswitch_accept (const int);
-int socksswitch_recv (const int, char *);
-int socksswitch_ssh_recv (LIBSSH2_CHANNEL **, char *);
-int socksswitch_send (const int, const char *, const SOCKET_DATA_LEN);
-int socksswitch_ssh_send (LIBSSH2_CHANNEL **, const char *,
-			  const SOCKET_DATA_LEN);
-int socksswitch_close (const int);
-int socksswitch_ssh_close (LIBSSH2_CHANNEL **);
+int socksswitch_init();
+void socksswitch_addr(const int, char *);
+int socksswitch_accept(const int);
+int socksswitch_recv(const int, char *);
+int socksswitch_ssh_recv(ssh_channel *, char *);
+int socksswitch_send(const int, const char *, const SOCKET_DATA_LEN);
+int socksswitch_ssh_send(ssh_channel *, const char *,
+			 const SOCKET_DATA_LEN);
+int socksswitch_close(const int);
+int socksswitch_ssh_close(ssh_channel *);
 
-int masterSocket (const int);
-int clientSocket (const char *, const int);
-int sshSocket (const char *, const int, const char *, const char *,
-	       const char *, LIBSSH2_SESSION **);
-int sshForward (LIBSSH2_SESSION **, const char *, const int,
-		LIBSSH2_CHANNEL **);
-int sshRead (LIBSSH2_CHANNEL *, char *, int);
+int masterSocket(const int);
+int clientSocket(const char *, const int);
+int sshSocket(const char *, const int, const char *, const char *,
+	      const char *, ssh_session *);
+int sshForward(ssh_session *, const char *, const int, ssh_channel **);
+int sshRead(ssh_channel *, char *, int);
 
-void socketError ();
-void sshError (LIBSSH2_SESSION *);
+void socketError();
 
-#endif /* SOCKETS_H */
+#endif				/* SOCKETS_H */

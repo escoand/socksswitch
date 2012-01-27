@@ -1,3 +1,4 @@
+
 /*
  *     Copyright (C) 2011-2012 Andreas Schönfelder
  *     https://github.com/escoand/socksswitch
@@ -47,20 +48,19 @@
 #endif
 
 
-enum TRACE_LEVEL
-{
-  TRACE_LEVEL_NO,
-  TRACE_LEVEL_ERROR,
-  TRACE_LEVEL_WARNING,
-  TRACE_LEVEL_INFO,
-  TRACE_LEVEL_VERBOSE
+enum TRACE_LEVEL {
+    TRACE_LEVEL_NO,
+    TRACE_LEVEL_ERROR,
+    TRACE_LEVEL_WARNING,
+    TRACE_LEVEL_INFO,
+    TRACE_LEVEL_VERBOSE
 };
 
-void trace (const char *, const int,
-	    const char *, enum TRACE_LEVEL, const char *, ...);
-void trace_append (enum TRACE_LEVEL, const char *, ...);
-void trace_dump (const char *, int);
-void trace_memory ();
+void trace(const char *, const int,
+	   const char *, enum TRACE_LEVEL, const char *, ...);
+void trace_append(enum TRACE_LEVEL, const char *, ...);
+void trace_dump(const char *, int);
+void trace_memory();
 
 
-#endif /* TRACE_H */
+#endif				/* TRACE_H */

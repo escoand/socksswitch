@@ -1,3 +1,4 @@
+
 /*
  *     Copyright (C) 2011-2012 Andreas Schönfelder
  *     https://github.com/escoand/socksswitch
@@ -21,6 +22,6 @@
 #ifndef MATCH_H
 #define MATCH_H
 
-int matching (char *, char *);
+int matching(char *, char *);
 
-#endif /* MATCH_H */
+#endif				/* MATCH_H */
