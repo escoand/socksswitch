@@ -161,8 +161,8 @@ int socksswitch_ssh_recv(ssh_channel * channel, char *buf)
     /* error */
     else if (rc != 0) {
 	TRACE_WARNING
-	    ("failure on receiving (channel:%i err:%i): \n", *channel, rc);
-	//sshError((*channel)->session);
+	    ("failure on receiving (channel:%i err:%i): %s\n", *channel,
+	     rc, ssh_get_error(ssh_channel_get_session(*channel)));
 	return SOCKET_ERROR;
     }
 
@@ -223,8 +223,10 @@ socksswitch_ssh_send(ssh_channel * channel, const char *buf,
 
 	/* error */
 	if (rc <= 0) {
-	    TRACE_WARNING("failure on sending (channel:%i: err:%i): ",
-			  *channel, rc);
+	    TRACE_WARNING("failure on sending (channel:%i: err:%i): %s\n",
+			  *channel, rc,
+			  ssh_get_error(ssh_channel_get_session
+					(*channel)));
 	    return SOCKET_ERROR;
 	}
 	bytessend += rc;
@@ -375,9 +377,8 @@ sshSocket(const char *host, const int port,
 	  const char *username, const char *privkeyfile,
 	  const char *pubkeyfile, ssh_session * session)
 {
-    int rc, sock, i;
-    ssh_string pubkey;
-    int pubkeytype;
+    int hlen;
+    unsigned char *hash = NULL;
 
     DEBUG;
 
@@ -390,30 +391,41 @@ sshSocket(const char *host, const int port,
 
     DEBUG;
 
-    /* create socket */
-    sock = clientSocket(host, port);
-    if (sock <= 0)
-	return SOCKET_ERROR;
-
-    DEBUG;
-
     /* startup session */
     *session = ssh_new();
     if (*session == NULL)
 	return 0;
 
+    DEBUG;
+
     /* connect */
     ssh_options_set(*session, SSH_OPTIONS_HOST, host);
     ssh_options_set(*session, SSH_OPTIONS_PORT, &port);
-    rc = ssh_connect(*session);
-    if (rc != SSH_OK) {
+    if (ssh_connect(*session) != SSH_OK) {
 	TRACE_ERROR("ssh session connect (session:%i): %s\n", *session,
 		    ssh_get_error(*session));
 	ssh_disconnect(*session);
 	ssh_free(*session);
 	return 0;
     }
-    TRACE_VERBOSE("ssh session connected: %i\n", *session);
+
+    DEBUG;
+
+    /* verify host */
+    hlen = ssh_get_pubkey_hash(*session, &hash);
+    switch (ssh_is_server_known(*session)) {
+    case SSH_SERVER_KNOWN_OK:
+	break;
+    case SSH_SERVER_KNOWN_CHANGED:
+    case SSH_SERVER_FOUND_OTHER:
+    case SSH_SERVER_FILE_NOT_FOUND:
+    case SSH_SERVER_NOT_KNOWN:
+    case SSH_SERVER_ERROR:
+	TRACE_WARNING("ssh fingerprint %s invalid for %s\n",
+		      ssh_get_hexa(hash, hlen), host);
+	/*free(hash);
+	   return SOCKET_ERROR; */
+    }
 
     DEBUG;
 
@@ -422,12 +434,16 @@ sshSocket(const char *host, const int port,
 	!= SSH_AUTH_SUCCESS) {
 	TRACE_WARNING("ssh auth to %s:%i failed: %s\n", host, port,
 		      ssh_get_error(*session));
-	sock = SOCKET_ERROR;
+	return SOCKET_ERROR;
     }
+
+    TRACE_VERBOSE("ssh connected: %i\n", *session);
+
+    free(hash);
 
     DEBUG;
 
-    return sock;
+    return ssh_get_fd(*session);
 }
 
 /* getting error messages */
@@ -436,8 +452,9 @@ void socketError()
     char msg[256] = "\n";
     if (SOCKET_ERROR_CODE != 0) {
 #ifdef WIN32
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, SOCKET_ERROR_CODE,
-		      LANG_SYSTEM_DEFAULT, msg, sizeof(msg), NULL);
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL,
+		      SOCKET_ERROR_CODE, LANG_SYSTEM_DEFAULT, msg,
+		      sizeof(msg), NULL);
 #else
 	strcpy(msg, strerror(SOCKET_ERROR_CODE));
 	strcat(msg, "\n");

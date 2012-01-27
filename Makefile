@@ -38,6 +38,9 @@ OBJS     := $(addprefix $(BINDIR)/,$(OBJS))
 MAIN     := $(addprefix $(BINDIR)/,$(MAIN))
 
 
+all: $(MAIN)
+
+
 debug: CCFLAGS += -g -D_DEBUG -D_DEBUG_
 debug: all
 
@@ -47,8 +50,6 @@ static: all
 mingw32: CC = i586-mingw32msvc-cc
 mingw32: all
 
-
-all: $(MAIN)
 
 $(MAIN): $(OBJS)
 	$(CC) -o $(MAIN) $(OBJS) $(LDFLAGS)

@@ -102,9 +102,11 @@ int main(int argc, char *argv[])
 			   destinations[i].user,
 			   destinations[i].privkeyfile,
 			   destinations[i].pubkeyfile, &session);
-	    destinations[i].session = session;
-	    FD_SET(rc, &sockets_set);
-	    FD_SET(rc, &ssh_set);
+	    if (rc > 0) {
+		destinations[i].session = session;
+		FD_SET(rc, &sockets_set);
+		FD_SET(rc, &ssh_set);
+	    }
 	}
     }
 
@@ -222,7 +224,7 @@ int main(int argc, char *argv[])
 		    if (channel != NULL &&
 			channel_open_forward(channel, dst_host,
 					     getSocksReqPort(buf, rc),
-					     NULL, 0) != SSH_OK) {
+					     "", 0) == SSH_OK) {
 
 			/* add new socket */
 			forwardsAdd(FORWARD_TYPE_SSH,
