@@ -24,8 +24,7 @@
 #include <string.h>
 #include "match.h"
 
-int matching(char *text, char *pattern)
-{
+int matching(char *text, char *pattern) {
     char *orig_pattern = pattern;
     //char *orig_text = text;
 

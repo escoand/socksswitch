@@ -1,1 +1,2 @@
-indent -kr -bbb src/*
+#!/bin/sh
+indent -kr -bbb -brf src/*

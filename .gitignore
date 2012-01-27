@@ -2,5 +2,6 @@ build/
 lib/
 tools/
 socksswitch.cfg
+*.log
 *pnproj
 *.pnps

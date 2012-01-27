@@ -34,8 +34,7 @@
 
 void
 trace(const char *file, const int line, const char *function,
-      enum TRACE_LEVEL level, const char *format, ...)
-{
+      enum TRACE_LEVEL level, const char *format, ...) {
     const char *tl[] = { "", "ERROR", "WARNING", "INFO", "VERBOSE" };
     FILE *output;
     char datestr[9];
@@ -84,8 +83,7 @@ trace(const char *file, const int line, const char *function,
 	fclose(output);
 }
 
-void trace_append(enum TRACE_LEVEL level, const char *format, ...)
-{
+void trace_append(enum TRACE_LEVEL level, const char *format, ...) {
     FILE *output;
     va_list ap;
 
@@ -115,8 +113,7 @@ void trace_append(enum TRACE_LEVEL level, const char *format, ...)
 	fclose(output);
 }
 
-void trace_dump(const char *data, int len)
-{
+void trace_dump(const char *data, int len) {
     int i, j;
     FILE *output;
 
@@ -163,8 +160,7 @@ void trace_dump(const char *data, int len)
 	fclose(output);
 }
 
-void trace_memory()
-{
+void trace_memory() {
 #ifdef WIN32
     HANDLE hProcess;
     PROCESS_MEMORY_COUNTERS pmc;

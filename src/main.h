@@ -55,6 +55,7 @@ typedef struct {
     int left;
     int right;
     ssh_channel channel;
+    int recv;
 } FORWARD_PAIR;
 
 
