@@ -99,11 +99,27 @@ unsigned short getSocksReqPort(const char *buf, const int len) {
     if (req->ver == 4)
 	port = req->data.socks4.port;
 
-    /* socks5 */
+    /* socks5 ipv4 */
+    else if (req->ver == 5 && req->data.socks5.atyp == 1) {
+	memcpy(&port,
+	       &req->data.socks5.atyp +
+	       sizeof(&req->data.socks5.data.ipv4) + 1, 2);
+	port = ntohs(port);
+    }
+
+    /* socks5 domain */
     else if (req->ver == 5) {
 	memcpy(&port,
 	       &req->data.socks5.data.str + req->data.socks5.data.str.len +
 	       1, 2);
+	port = ntohs(port);
+    }
+
+    /* socks5 ipv6 */
+    else if (req->ver == 5 && req->data.socks5.atyp == 4) {
+	memcpy(&port,
+	       &req->data.socks5.atyp +
+	       sizeof(&req->data.socks5.data.ipv6) + 1, 2);
 	port = ntohs(port);
     }
 

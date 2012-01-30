@@ -163,6 +163,11 @@ int main(int argc, char *argv[]) {
 		nextsock = 0;
 		DEBUG;
 
+		/*int ssh_channel_select(ssh_channel * readchans,
+		   ssh_channel * writechans,
+		   ssh_channel * exceptchans,
+		   struct timeval *timeout); */
+
 		/* recv data from channels */
 		for (j = 0; j < sizeof(forwards) / sizeof(forwards[0]);
 		     j++) {
@@ -193,24 +198,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		DEBUG;
-		//if (nextsock)
 		continue;
 	    }
-
-	    /* skip */
-	    /*nextsock = 0;
-	       for (j = 0; j < sizeof(forwards) / sizeof(forwards[0]); j++) {
-	       if (forwards[i].left == FD_SET_DATA(read_set, i)
-	       && forwards[i].recv == -1) {
-	       nextsock = 1;
-	       TRACE_INFO
-	       ("wait for receive from partner (socket:%i)\n",
-	       forwards[i].left);
-	       break;
-	       }
-	       }
-	       if (nextsock)
-	       continue; */
 
 	    /* get new data */
 	    rc = socksswitch_recv(FD_SET_DATA(read_set, i), buf);
