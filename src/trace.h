@@ -59,7 +59,7 @@ enum TRACE_LEVEL {
 void trace(const char *, const int,
 	   const char *, enum TRACE_LEVEL, const char *, ...);
 void trace_append(enum TRACE_LEVEL, const char *, ...);
-void trace_dump(const char *, int);
+void trace_dump(const void *, int);
 void trace_memory();
 
 

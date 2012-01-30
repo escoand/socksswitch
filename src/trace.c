@@ -113,7 +113,7 @@ void trace_append(enum TRACE_LEVEL level, const char *format, ...) {
 	fclose(output);
 }
 
-void trace_dump(const char *data, int len) {
+void trace_dump(const void *data, int len) {
     int i, j;
     FILE *output;
 
@@ -135,7 +135,7 @@ void trace_dump(const char *data, int len) {
 
 	/* hex */
 	for (j = i; j < i + 16 && j < len; j++)
-	    fprintf(output, "%02x ", (unsigned char) data[j]);
+	    fprintf(output, "%02x ", ((unsigned char*) data)[j]);
 
 	/* spacer */
 	for (; j < i + 16; j++)
@@ -144,16 +144,14 @@ void trace_dump(const char *data, int len) {
 
 	/* ascii */
 	for (j = i; j < i + 16 && j < len; j++) {
-	    if (data[j] < 32)
+	    if (((unsigned char*) data)[j] < 32)
 		fprintf(output, ".");
 	    else
-		fprintf(output, "%c", (unsigned char) data[j]);
+		fprintf(output, "%c", ((unsigned char*) data)[j]);
 	}
 
 	fprintf(output, EOL);
     }
-    /*if ((len * 3) % 80)
-       fprintf(output, EOL); */
 
     /*  close log file */
     if (getenv("LOGFILE") != NULL)
