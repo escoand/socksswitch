@@ -105,6 +105,13 @@ int main(int argc, char *argv[]) {
 		destinations[i].session = session;
 		FD_SET(rc, &sockets_set);
 		FD_SET(rc, &ssh_set);
+	    } else {
+		strcpy(destinations[i].host, "");
+		destinations[i].port = 0;
+		strcpy(destinations[i].user, "");
+		strcpy(destinations[i].privkeyfile, "");
+		strcpy(destinations[i].pubkeyfile, "");
+		destinations[i].session = NULL;
 	    }
 	}
     }
@@ -159,29 +166,35 @@ int main(int argc, char *argv[]) {
 		/* recv data from channels */
 		for (j = 0; j < sizeof(forwards) / sizeof(forwards[0]);
 		     j++) {
-		    if (forwards[j].channel != NULL) {
+		    if (forwards[i].left != FD_SET_DATA(read_set, i)
+			&& forwards[j].channel != NULL) {
 			rc = socksswitch_ssh_recv(&forwards[j].channel,
 						  buf);
 
 			/* nothing received */
 			if (rc == 0) {
-			    nextsock = 1;
+			    nextsock = 0;
 			}
 
 			/* received */
 			else if (rc > 0) {
-			    nextsock = 1;
 			    forward(0, &forwards[j].channel, buf, rc);
+			    nextsock = 1;
+			    break;
 			}
 
 			/* error */
-			else if (rc < 0)
+			else {
 			    cleanEnd(forwards[j].left);
+			    nextsock = 1;
+			    break;
+			}
 		    }
 		}
 
-		if (nextsock)
-		    break;
+		DEBUG;
+		//if (nextsock)
+		continue;
 	    }
 
 	    /* skip */
@@ -228,22 +241,22 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* ssh forwarding */
-		if (dst->session) {
+		if (dst->session != NULL) {
 		    DEBUG;
 
 		    getSocksReqHost(dst_host, buf, rc);
 		    TRACE_INFO("connect through %s:%i to %s:%i\n",
 			       dst->host, dst->port, dst_host,
 			       getSocksReqPort(buf, rc));
-		    channel = ssh_channel_new(dst->session);
 
 		    DEBUG;
 
 		    /* connected */
 		    if (channel != NULL &&
-			channel_open_forward(channel, dst_host,
-					     getSocksReqPort(buf, rc),
-					     "", 0) == SSH_OK) {
+			socksswitch_ssh_connect(&dst->session, dst_host,
+						getSocksReqPort(buf,
+								rc),
+						&channel) == SSH_OK) {
 
 			/* add new socket */
 			forwardsAdd(FORWARD_TYPE_SSH,
@@ -298,7 +311,8 @@ int main(int argc, char *argv[]) {
 	    }
 
 	    /* forwarding */
-	    else if (!forward(FD_SET_DATA(read_set, i), NULL, buf, rc)) {
+	    else if (!forward(FD_SET_DATA(read_set, i), NULL, buf, rc)
+		     && !FD_ISSET(FD_SET_DATA(read_set, i), &ssh_set)) {
 		DEBUG;
 		cleanEnd(FD_SET_DATA(read_set, i));
 	    }
@@ -480,7 +494,7 @@ int forwardsAdd(FORWARD_TYPE type, const int left,
 		forwards[i].channel = *channel;
 		TRACE_VERBOSE
 		    ("forward added (socket:%i channel:%i)\n", left,
-		     channel);
+		     *channel);
 	    } else
 		TRACE_VERBOSE
 		    ("forward added (socket:%i socket:%i)\n", left, sock);

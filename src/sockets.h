@@ -49,11 +49,14 @@ int socksswitch_init();
 void socksswitch_addr(const int, char *);
 int socksswitch_accept(const int);
 int socksswitch_recv(const int, char *);
-int socksswitch_ssh_recv(ssh_channel *, char *);
 int socksswitch_send(const int, const char *, const SOCKET_DATA_LEN);
+int socksswitch_close(const int);
+
+int socksswitch_ssh_connect(ssh_session *, const char *, const int,
+			    ssh_channel *);
+int socksswitch_ssh_recv(ssh_channel *, char *);
 int socksswitch_ssh_send(ssh_channel *, const char *,
 			 const SOCKET_DATA_LEN);
-int socksswitch_close(const int);
 int socksswitch_ssh_close(ssh_channel *);
 
 int masterSocket(const int);

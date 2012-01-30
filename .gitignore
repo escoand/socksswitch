@@ -1,7 +1,10 @@
-build/
+bin/
 lib/
 tools/
+
 socksswitch.cfg
+
+*~
 *.log
-*pnproj
+*.pnproj
 *.pnps
