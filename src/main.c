@@ -53,14 +53,12 @@ int destinations_count = 0;
 
 
 int main(int argc, char *argv[]) {
-    int rc, nextsock;
+    int rc;
     unsigned int i, j, masterport, socket_max, newsock;
     char buf[SOCKET_DATA_MAX], tmp[SOCKET_DATA_MAX];
-    ssh_channel channel;
+    ssh_channel channel, channels_in[32], channels_out[32];
     FORWARD_DESTINATION *dst = NULL;
     char dst_host[256] = "";
-
-    DEBUG;
 
     /* default */
     putenv((char *) "TRACE=2");
@@ -68,6 +66,8 @@ int main(int argc, char *argv[]) {
     /* read params and config */
     readParams(argc, argv);
     masterport = readConfig();
+
+    DEBUG;
 
     /* init socket handling */
     socksswitch_init();
@@ -124,9 +124,16 @@ int main(int argc, char *argv[]) {
 
 	DEBUG;
 
+	/* channels list */
+	for (i = j = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++)
+	    if (forwards[i].channel != NULL)
+		channels_in[j++] = forwards[i].channel;
+	channels_in[j] = NULL;
+
 	/* wait for socket actions */
 	read_set = sockets_set;
-	rc = select(socket_max + 1, &read_set, NULL, NULL, 0);
+	rc = ssh_select(channels_in, channels_out, socket_max + 1,
+			&read_set, 0);
 
 	DEBUG;
 
@@ -149,6 +156,25 @@ int main(int argc, char *argv[]) {
 
 	DEBUG;
 
+	/* ssh channel action */
+	for (i = 0; channels_out[i] != NULL; i++) {
+	    memset(buf, 0, SOCKET_DATA_MAX);
+	    rc = socksswitch_ssh_recv(&channels_out[i], buf);
+
+	    /* forward */
+	    if (rc > 0)
+		forward(0, &channels_out[i], buf, rc);
+
+	    /* error */
+	    else if (rc < 0)
+		socksswitch_ssh_close(&channels_out[i]);
+	}
+
+	if (i > 0)
+	    continue;
+
+	DEBUG;
+
 	/* client socket action */
 	for (i = 0; i < FD_SET_SIZE(read_set); i++) {
 
@@ -156,57 +182,14 @@ int main(int argc, char *argv[]) {
 	    if (FD_SET_DATA(read_set, i) == 0)
 		continue;
 
-	    memset(buf, 0, SOCKET_DATA_MAX);
-
-	    /* ssh channel action */
-	    if (FD_ISSET(FD_SET_DATA(read_set, i), &ssh_set)) {
-		nextsock = 0;
-		DEBUG;
-
-		/*int ssh_channel_select(ssh_channel * readchans,
-		   ssh_channel * writechans,
-		   ssh_channel * exceptchans,
-		   struct timeval *timeout); */
-
-		/* recv data from channels */
-		for (j = 0; j < sizeof(forwards) / sizeof(forwards[0]);
-		     j++) {
-		    if (forwards[i].left != FD_SET_DATA(read_set, i)
-			&& forwards[j].channel != NULL) {
-			rc = socksswitch_ssh_recv(&forwards[j].channel,
-						  buf);
-
-			/* nothing received */
-			if (rc == 0) {
-			    nextsock = 0;
-			}
-
-			/* received */
-			else if (rc > 0) {
-			    forward(0, &forwards[j].channel, buf, rc);
-			    nextsock = 1;
-			    break;
-			}
-
-			/* error */
-			else {
-			    cleanEnd(forwards[j].left);
-			    nextsock = 1;
-			    break;
-			}
-		    }
-		}
-
-		DEBUG;
-		continue;
-	    }
-
 	    /* get new data */
+	    memset(buf, 0, SOCKET_DATA_MAX);
 	    rc = socksswitch_recv(FD_SET_DATA(read_set, i), buf);
 
 	    /* socket closed or error */
 	    if (rc <= 0) {
 		DEBUG;
+
 		cleanEnd(FD_SET_DATA(read_set, i));
 	    }
 
@@ -234,17 +217,13 @@ int main(int argc, char *argv[]) {
 		    DEBUG;
 
 		    getSocksReqHost(dst_host, buf, rc);
-		    TRACE_INFO("connect through %s:%i to %s:%i\n",
-			       dst->host, dst->port, dst_host,
-			       getSocksReqPort(buf, rc));
-
-		    DEBUG;
 
 		    /* connected */
 		    if (channel != NULL &&
-			socksswitch_ssh_connect(&dst->session, dst_host,
-						getSocksReqPort(buf,
-								rc),
+			socksswitch_ssh_connect(&dst->session,
+						dst_host,
+						getSocksReqPort
+						(buf, rc),
 						&channel) == SSH_OK) {
 
 			/* add new socket */
@@ -253,8 +232,8 @@ int main(int argc, char *argv[]) {
 
 			/* init connection */
 			buf[1] = 0x00;
-			socksswitch_send(FD_SET_DATA(read_set, i), buf,
-					 rc);
+			socksswitch_send(FD_SET_DATA(read_set, i),
+					 buf, rc);
 		    }
 
 		    /* error */
@@ -280,8 +259,8 @@ int main(int argc, char *argv[]) {
 			/* add new socket */
 			FD_SET(newsock, &sockets_set);
 			forwardsAdd(FORWARD_TYPE_DIRECT,
-				    FD_SET_DATA(read_set, i), newsock,
-				    NULL);
+				    FD_SET_DATA(read_set, i),
+				    newsock, NULL);
 
 			/* init connection */
 			if (socksswitch_send
@@ -376,6 +355,7 @@ int readConfig() {
     char cfgline[1024];
     char cfgtype[256];
     int rc, masterport = 0;
+
     DEBUG;
 
     /* open config file */
@@ -449,16 +429,19 @@ int readConfig() {
 int matchFilter(FORWARD_DESTINATION ** fo, const char *buf, const int len) {
     unsigned int i, j;
     char host[256] = "";
+
     DEBUG;
+
     getSocksReqHost(host, buf, len);
+
     for (i = 0; i < destinations_count; i++)
 	for (j = 0; j < destinations[i].filters_count; j++)
 	    if (matching(host, destinations[i].filters[j])) {
 		TRACE_INFO
 		    ("request %s:%i matches filter %s for %s:%i\n",
 		     host, getSocksReqPort(buf, len),
-		     destinations[i].filters[j], destinations[i].host,
-		     destinations[i].port);
+		     destinations[i].filters[j],
+		     destinations[i].host, destinations[i].port);
 		*fo = &destinations[i];
 		return 1;
 	    }
@@ -473,7 +456,9 @@ int matchFilter(FORWARD_DESTINATION ** fo, const char *buf, const int len) {
 int forwardsAdd(FORWARD_TYPE type, const int left,
 		const int sock, ssh_channel * channel) {
     unsigned int i;
+
     DEBUG;
+
     for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
 	if (forwards[i].left == 0) {
 	    forwards[i].type = type;
@@ -482,8 +467,8 @@ int forwardsAdd(FORWARD_TYPE type, const int left,
 	    if (channel != NULL) {
 		forwards[i].channel = *channel;
 		TRACE_VERBOSE
-		    ("forward added (socket:%i channel:%i)\n", left,
-		     *channel);
+		    ("forward added (socket:%i channel:%i)\n",
+		     left, *channel);
 	    } else
 		TRACE_VERBOSE
 		    ("forward added (socket:%i socket:%i)\n", left, sock);
@@ -500,7 +485,9 @@ int forwardsAdd(FORWARD_TYPE type, const int left,
 int forward(const int sock, ssh_channel * channel,
 	    const char *buf, const int len) {
     unsigned int i;
+
     DEBUG;
+
     for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
 
 	/* from local to direct */
@@ -578,6 +565,7 @@ int forward(const int sock, ssh_channel * channel,
 /* clean shutdown of sockets */
 void cleanEnd(const int sock) {
     unsigned int i;
+
     DEBUG;
 
     /* disconnect forwardings */

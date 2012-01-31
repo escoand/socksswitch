@@ -99,7 +99,12 @@ int socksswitch_accept(const int sock) {
 int socksswitch_ssh_connect(ssh_session * session, const char *host,
 			    const int port, ssh_channel * channel) {
     int rc;
+
     DEBUG;
+
+    if (!ssh_is_connected(*session))
+	return 0;
+
     *channel = ssh_channel_new(*session);
 
     TRACE_VERBOSE("try to connect to %s:%i (session:%i channel:%i)\n",
@@ -407,8 +412,7 @@ sshSocket(const char *host, const int port,
 	TRACE_WARNING
 	    ("ssh fingerprint %s invalid for %s\n",
 	     ssh_get_hexa(hash, hlen), host);
-	/*free(hash);
-	   return SOCKET_ERROR; */
+	//return SOCKET_ERROR;
     }
 
     DEBUG;
@@ -424,7 +428,6 @@ sshSocket(const char *host, const int port,
     TRACE_INFO
 	("connected to %s:%i: (socket:%i session:%i)\n",
 	 host, port, ssh_get_fd(*session), *session);
-    free(hash);
     DEBUG;
     return ssh_get_fd(*session);
 }
