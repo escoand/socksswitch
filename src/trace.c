@@ -135,7 +135,7 @@ void trace_dump(const void *data, int len) {
 
 	/* hex */
 	for (j = i; j < i + 16 && j < len; j++)
-	    fprintf(output, "%02x ", ((unsigned char*) data)[j]);
+	    fprintf(output, "%02x ", ((unsigned char *) data)[j]);
 
 	/* spacer */
 	for (; j < i + 16; j++)
@@ -144,10 +144,11 @@ void trace_dump(const void *data, int len) {
 
 	/* ascii */
 	for (j = i; j < i + 16 && j < len; j++) {
-	    if (((unsigned char*) data)[j] < 32)
+	    if (((unsigned char *) data)[j] < 0x20
+		|| ((unsigned char *) data)[j] > 0x7e)
 		fprintf(output, ".");
 	    else
-		fprintf(output, "%c", ((unsigned char*) data)[j]);
+		fprintf(output, "%c", ((unsigned char *) data)[j]);
 	}
 
 	fprintf(output, EOL);
