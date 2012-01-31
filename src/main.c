@@ -573,13 +573,15 @@ void cleanEnd(const int sock) {
 	if (forwards[i].left == sock || forwards[i].right == sock) {
 
 	    /* close sockets */
-	    if (sock != forwards[i].left && sock > 0) {
+	    if (sock != forwards[i].left && sock > 0
+		&& !FD_ISSET(sock, &ssh_set)) {
 		FD_CLR(forwards[i].left, &sockets_set);
 		FD_CLR(forwards[i].left, &ssh_set);
 		FD_CLR(forwards[i].left, &read_set);
 		socksswitch_close(forwards[i].left);
 	    }
-	    if (sock != forwards[i].right && sock > 0) {
+	    if (sock != forwards[i].right && sock > 0
+		&& !FD_ISSET(sock, &ssh_set)) {
 		FD_CLR(forwards[i].right, &sockets_set);
 		FD_CLR(forwards[i].right, &read_set);
 		socksswitch_close(forwards[i].right);
@@ -596,7 +598,7 @@ void cleanEnd(const int sock) {
     }
 
     /* disconnect unforwarded */
-    if (FD_ISSET(sock, &sockets_set)) {
+    if (FD_ISSET(sock, &sockets_set) && !FD_ISSET(sock, &ssh_set)) {
 	FD_CLR(sock, &sockets_set);
 	FD_CLR(sock, &ssh_set);
 	FD_CLR(sock, &read_set);
