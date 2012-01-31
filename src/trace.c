@@ -160,6 +160,14 @@ void trace_dump(const void *data, int len) {
 }
 
 void trace_memory() {
+    FILE *output;
+
+    /*  log to file */
+    if (getenv("LOGFILE") != NULL)
+	output = fopen(getenv("LOGFILE"), "a");
+    else
+	output = stdout;
+
 #ifdef WIN32
     HANDLE hProcess;
     PROCESS_MEMORY_COUNTERS pmc;
@@ -170,8 +178,8 @@ void trace_memory() {
 	return;
 
     if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
-	printf
-	    ("pf:%u pm:%u cm:%u ppp:%u pp:%u pnpp:%u npp:%u\n",
+	fprintf
+	    (output, "pf:%u pm:%u cm:%u ppp:%u pp:%u pnpp:%u npp:%u\n",
 	     (unsigned int) pmc.PageFaultCount,
 	     (unsigned int) pmc.PeakWorkingSetSize,
 	     (unsigned int) pmc.WorkingSetSize,
@@ -183,6 +191,10 @@ void trace_memory() {
 
     CloseHandle(hProcess);
 #else
-    printf("\n");
+    fprintf(output, "\n");
 #endif
+
+    /*  close log file */
+    if (getenv("LOGFILE") != NULL)
+	fclose(output);
 }
