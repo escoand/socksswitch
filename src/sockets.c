@@ -312,7 +312,7 @@ int socksswitch_close(const int sock) {
 	return 0;
     }
 
-    addrstr = socksswitch_addr(sock);
+    strcpy(addrstr, socksswitch_addr(sock));
 
     /* disconnect */
     if (shutdown(sock, SD_BOTH) == 0 && SOCKET_CLOSE(sock) == 0)
