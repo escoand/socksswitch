@@ -29,7 +29,7 @@
 #include "socks.h"
 #include "trace.h"
 
-#ifdef _WIN32
+#ifdef WIN32
 #include <winsock.h>
 #else
 #include <sys/socket.h>
@@ -102,7 +102,6 @@ int main(int argc, char *argv[]) {
 			   destinations[i].pubkeyfile, &session);
 	    if (rc > 0) {
 		destinations[i].session = session;
-		FD_SET(rc, &sockets_set);
 	    } else {
 		strcpy(destinations[i].host, "");
 		destinations[i].port = 0;
@@ -167,8 +166,6 @@ int main(int argc, char *argv[]) {
 	    else if (rc < 0)
 		socksswitch_ssh_close(&channels_out[i]);
 	}
-	if (i > 0)
-	    continue;
 
 	DEBUG;
 
@@ -183,10 +180,13 @@ int main(int argc, char *argv[]) {
 	    memset(buf, 0, SOCKET_DATA_MAX);
 	    rc = socksswitch_recv(FD_SET_DATA(read_set, i), buf);
 
-	    /* socket closed or error */
-	    if (rc <= 0) {
-		DEBUG;
+	    /* disconnected */
+	    if (rc == 0)
+		cleanEnd(FD_SET_DATA(read_set, i));
 
+	    /* socket closed or error */
+	    if (rc < 0) {
+		DEBUG;
 		cleanEnd(FD_SET_DATA(read_set, i));
 	    }
 
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
 		DEBUG;
 		rc = socksswitch_send(FD_SET_DATA(read_set, i),
 				      "\x05\x00", 2);
-		if (rc < 0)
+		if (rc <= 0)
 		    cleanEnd(rc);
 	    }
 
@@ -496,7 +496,7 @@ int forward(const int sock, ssh_channel * channel,
 	    if (socksswitch_send(forwards[i].right, buf, len)
 		<= 0)
 		cleanEnd(sock);
-	    DEBUG;
+	    DEBUG_LEAVE;
 	    return 1;
 	}
 
@@ -505,16 +505,11 @@ int forward(const int sock, ssh_channel * channel,
 		 && forwards[i].type == FORWARD_TYPE_SSH
 		 && forwards[i].left == sock) {
 
-	    /*if (memcmp(buf, "SSH-2.0-", 8) == 0)
-	       forwards[i].recv = -1;
-	       else
-	       forwards[i].recv = 0; */
-
 	    TRACE_VERBOSE
 		("forward to remote (socket:%i to channel:%i)\n",
 		 forwards[i].left, forwards[i].channel);
 	    socksswitch_ssh_send(&forwards[i].channel, buf, len);
-	    DEBUG;
+	    DEBUG_LEAVE;
 	    return 1;
 	}
 
@@ -528,7 +523,7 @@ int forward(const int sock, ssh_channel * channel,
 		 forwards[i].right, forwards[i].left);
 	    if (socksswitch_send(forwards[i].left, buf, len) <= 0)
 		cleanEnd(sock);
-	    DEBUG;
+	    DEBUG_LEAVE;
 	    return 1;
 	}
 
@@ -537,17 +532,12 @@ int forward(const int sock, ssh_channel * channel,
 		 && forwards[i].type == FORWARD_TYPE_SSH
 		 && forwards[i].channel == *channel) {
 
-	    /*if (memcmp(buf, "SSH-2.0-", 8) == 0)
-	       forwards[i].recv = -1;
-	       else
-	       forwards[i].recv = 0; */
-
 	    TRACE_VERBOSE
 		("forward to local (channel:%i to socket:%i)\n",
 		 forwards[i].channel, forwards[i].left);
 	    if (socksswitch_send(forwards[i].left, buf, len) <= 0)
 		cleanEnd(sock);
-	    DEBUG;
+	    DEBUG_LEAVE;
 	    return 1;
 	}
     }

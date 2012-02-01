@@ -24,14 +24,15 @@
 
 #include <libssh/libssh.h>
 
-
 #ifdef WIN32
 #define SOCKET_ADDR_LEN int
 #define SOCKET_DATA_LEN int
+#define SOCKET_CLOSE closesocket
 #define SOCKET_ERROR_CODE WSAGetLastError()
 #else
 #define SOCKET_ADDR_LEN socklen_t
 #define SOCKET_DATA_LEN size_t
+#define SOCKET_CLOSE close
 #define SOCKET_ERROR -1
 #define SOCKET_ERROR_CODE errno
 #endif
@@ -45,16 +46,16 @@ typedef enum {
     SOCKET_TYPE_SSH
 } SOCKET_TYPE;
 
-int socksswitch_init();
-void socksswitch_addr(const int, char *);
+void socksswitch_init();
+const char *socksswitch_addr(const int);
 int socksswitch_accept(const int);
-int socksswitch_recv(const int, char *);
+SOCKET_DATA_LEN socksswitch_recv(const int, char *);
 int socksswitch_send(const int, const char *, const SOCKET_DATA_LEN);
 int socksswitch_close(const int);
 
-int socksswitch_ssh_connect(ssh_session *, const char *, const int,
-			    ssh_channel *);
-int socksswitch_ssh_recv(ssh_channel *, char *);
+int socksswitch_ssh_connect(ssh_session *, const char *,
+			    const SOCKET_DATA_LEN, ssh_channel *);
+SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel *, char *);
 int socksswitch_ssh_send(ssh_channel *, const char *,
 			 const SOCKET_DATA_LEN);
 int socksswitch_ssh_close(ssh_channel *);
@@ -63,9 +64,7 @@ int masterSocket(const int);
 int clientSocket(const char *, const int);
 int sshSocket(const char *, const int, const char *, const char *,
 	      const char *, ssh_session *);
-int sshForward(ssh_session *, const char *, const int, ssh_channel **);
-int sshRead(ssh_channel *, char *, int);
 
-void socketError();
+const char *socketError();
 
 #endif				/* SOCKETS_H */
