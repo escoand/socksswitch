@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     char buf[SOCKET_DATA_MAX], tmp[SOCKET_DATA_MAX];
     ssh_channel channel, channels_in[32], channels_out[32];
     FORWARD_DESTINATION *dst = NULL;
-    char dst_host[256] = "";
+    char dst_host[256];
 
     /* default */
     putenv((char *) "TRACE=2");
@@ -168,7 +168,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	DEBUG;
-
 	/* client socket action */
 	for (i = 0; i < FD_SET_SIZE(read_set); i++) {
 
@@ -212,7 +211,7 @@ int main(int argc, char *argv[]) {
 		/* ssh forwarding */
 		if (dst->session != NULL) {
 		    DEBUG;
-
+		    memset(dst_host, 0, sizeof(dst_host));
 		    getSocksReqHost(dst_host, buf, rc);
 
 		    /* connected */
@@ -227,14 +226,13 @@ int main(int argc, char *argv[]) {
 
 			/* init connection */
 			buf[1] = 0x00;
-			socksswitch_send(FD_SET_DATA(read_set, i),
-					 buf, rc);
+			socksswitch_send(FD_SET_DATA(read_set, i), buf,
+					 rc);
 		    }
 
 		    /* error */
 		    else
 			cleanEnd(FD_SET_DATA(read_set, i));
-
 		    DEBUG;
 		}
 
@@ -250,8 +248,8 @@ int main(int argc, char *argv[]) {
 			/* add new socket */
 			FD_SET(newsock, &sockets_set);
 			forwardsAdd(FORWARD_TYPE_DIRECT,
-				    FD_SET_DATA(read_set, i),
-				    newsock, NULL);
+				    FD_SET_DATA(read_set, i), newsock,
+				    NULL);
 
 			/* init connection */
 			if (socksswitch_send
@@ -426,7 +424,6 @@ int matchFilter(FORWARD_DESTINATION ** fo, const char *buf, const int len) {
     DEBUG_ENTER;
 
     getSocksReqHost(host, buf, len);
-
     for (i = 0; i < destinations_count; i++)
 	for (j = 0; j < destinations[i].filters_count; j++)
 	    if (matching(host, destinations[i].filters[j])) {
