@@ -1,2 +1,2 @@
 #!/bin/sh
-indent -kr -bbb -brf src/*
+indent -kr -bbb -brf src/*.c src/*.h
