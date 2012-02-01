@@ -33,10 +33,11 @@
 
 /* return destination host of socks request */
 void getSocksReqHost(char *host, const char *buf, const int len) {
-    SOCKS_REQUEST *req = (SOCKS_REQUEST *) malloc(len);
+    SOCKS_REQUEST *req;
 
-    DEBUG;
+    DEBUG_ENTER;
 
+    req = (SOCKS_REQUEST *) malloc(len);
     memcpy(req, buf, len);
 
     /* socks4 */
@@ -83,16 +84,17 @@ void getSocksReqHost(char *host, const char *buf, const int len) {
 
     free(req);
 
-    DEBUG;
+    DEBUG_LEAVE;
 }
 
 /* return destination port of socks request */
 unsigned short getSocksReqPort(const char *buf, const int len) {
-    SOCKS_REQUEST *req = (SOCKS_REQUEST *) malloc(len);
+    SOCKS_REQUEST *req;
     unsigned short port = 0;
 
-    DEBUG;
+    DEBUG_ENTER;
 
+    req = (SOCKS_REQUEST *) malloc(len);
     memcpy(req, buf, len);
 
     /* socks4 */
@@ -125,7 +127,6 @@ unsigned short getSocksReqPort(const char *buf, const int len) {
 
     free(req);
 
-    DEBUG;
-
+    DEBUG_LEAVE;
     return port;
 }
