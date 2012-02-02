@@ -40,12 +40,12 @@ MAIN     := $(addprefix $(BINDIR)/,$(MAIN))
 
 all: $(MAIN)
 
-
 debug: CCFLAGS += -g -D_DEBUG -D_DEBUG_
 debug: all
 
-static: LDFLAGS := -Llib/static/ $(LDFLAGS) -static -static-libgcc
-static: all
+static: CCFLAGS += -DLIBSSH_STATIC
+static: LDFLAGS := -Llib/static/ $(LDFLAGS) -lzlib -static
+static: $(OBJS) all
 
 mingw32: CC = i586-mingw32msvc-cc
 mingw32: all
