@@ -129,8 +129,8 @@ int socksswitch_ssh_connect(ssh_session * session, const char *host,
     /* connect */
     if (ssh_channel_open_forward(*channel, host, port, "", 0) != SSH_OK) {
 	TRACE_WARNING
-	    ("failure on connect (session:%i err:%i): %s\n",
-	     *session, ssh_get_error_code(*session),
+	    ("failure on connect to %s:%i (session:%i err:%i): %s\n",
+	     host, port, *session, ssh_get_error_code(*session),
 	     ssh_get_error(*session));
 	if (channel != NULL)
 	    ssh_channel_free(*channel);
@@ -180,8 +180,9 @@ SOCKET_DATA_LEN socksswitch_recv(const int sock, char *buf) {
     /* error */
     else {
 	TRACE_WARNING
-	    ("failure on receiving (socket:%i err:%i): %s\n",
-	     sock, SOCKET_ERROR_CODE, socketError());
+	    ("failure on receiving from %s (socket:%i err:%i): %s\n",
+	     socksswitch_addr(sock), sock, SOCKET_ERROR_CODE,
+	     socketError());
 	socketError();
 	DEBUG_LEAVE;
 	return SOCKET_ERROR;
@@ -244,8 +245,9 @@ socksswitch_send(const int sock,
 	/* error */
 	if (rc <= 0) {
 	    TRACE_WARNING
-		("failure on sending (socket:%i: err:%i): %s\n",
-		 sock, SOCKET_ERROR_CODE, socketError());
+		("failure on sending to %s (socket:%i: err:%i): %s\n",
+		 socksswitch_addr(sock), sock, SOCKET_ERROR_CODE,
+		 socketError());
 	    socketError();
 	    DEBUG_LEAVE;
 	    return SOCKET_ERROR;
@@ -303,8 +305,6 @@ socksswitch_ssh_send(ssh_channel * channel,
 
 /* wrapper for socket closing */
 int socksswitch_close(const int sock) {
-    char addrstr[256];
-
     DEBUG_ENTER;
 
     if (sock <= 0) {
@@ -312,16 +312,17 @@ int socksswitch_close(const int sock) {
 	return 0;
     }
 
-    strcpy(addrstr, socksswitch_addr(sock));
-
     /* disconnect */
     if (shutdown(sock, SD_BOTH) == 0 && SOCKET_CLOSE(sock) == 0)
-	TRACE_INFO("disconnected from %s (socket:%i)\n", addrstr, sock);
+	TRACE_INFO("disconnected from %s (socket:%i)\n",
+		   socksswitch_addr(sock), sock);
 
     /* error */
     else {
-	TRACE_WARNING("failure on closing (socket:%i err:%i): %s\n",
-		      sock, SOCKET_ERROR_CODE, socketError());
+	TRACE_WARNING
+	    ("failure on closing from %s (socket:%i err:%i): %s\n",
+	     socksswitch_addr(sock), sock, SOCKET_ERROR_CODE,
+	     socketError());
 	DEBUG_LEAVE;
 	return SOCKET_ERROR;
     }
@@ -494,8 +495,8 @@ sshSocket(const char *host, const int port,
     ssh_options_set(*session, SSH_OPTIONS_PORT, &port);
     if (ssh_connect(*session) != SSH_OK) {
 	TRACE_ERROR
-	    ("failure on connecting (session:%i): %s\n",
-	     *session, ssh_get_error(*session));
+	    ("failure on connecting to %s:%i (session:%i): %s\n",
+	     host, port, *session, ssh_get_error(*session));
 	ssh_disconnect(*session);
 	ssh_free(*session);
 	DEBUG_LEAVE;
@@ -524,7 +525,7 @@ sshSocket(const char *host, const int port,
     if (ssh_userauth_privatekey_file(*session, username, privkeyfile, "")
 	!= SSH_AUTH_SUCCESS) {
 	TRACE_WARNING
-	    ("failure on ssh auth to $s:%i: (session:%i err:%i) %s\n",
+	    ("failure on ssh auth to %s:%i: (session:%i err:%i) %s\n",
 	     host, port, *session, ssh_get_error_code(*session),
 	     ssh_get_error(*session));
 	DEBUG_LEAVE;
@@ -532,7 +533,7 @@ sshSocket(const char *host, const int port,
     }
 
     TRACE_INFO
-	("connected to %s:%i: (socket:%i session:%i)\n",
+	("connected to %s:%i (socket:%i session:%i)\n",
 	 host, port, ssh_get_fd(*session), *session);
 
     DEBUG_LEAVE;
