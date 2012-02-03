@@ -21,6 +21,7 @@
 CC       ?= gcc
 CCFLAGS   = -O3 -Wall -Isrc/ -Iinclude/
 LDFLAGS   = -Llib/ -lssh
+BUILDIR   = build
 BINDIR    = bin
 MAIN      = socksswitch
 OBJS      = main.o match.o sockets.o socks.o trace.o
@@ -34,7 +35,7 @@ MAIN     := $(MAIN).exe
 endif
 
 
-OBJS     := $(addprefix $(BINDIR)/,$(OBJS))
+OBJS     := $(addprefix $(BUILDIR)/,$(OBJS))
 MAIN     := $(addprefix $(BINDIR)/,$(MAIN))
 
 
@@ -44,7 +45,7 @@ debug: CCFLAGS += -g -D_DEBUG -D_DEBUG_
 debug: all
 
 static: CCFLAGS += -DLIBSSH_STATIC
-static: LDFLAGS := -Llib/static/ $(LDFLAGS) -lzlib -static
+static: LDFLAGS := -Llib/static/ $(LDFLAGS) -lzlibstat -llibeay32 -lssleay32 -static
 static: $(OBJS) all
 
 mingw32: CC = i586-mingw32msvc-cc
@@ -54,11 +55,13 @@ mingw32: all
 $(MAIN): $(OBJS)
 	$(CC) -o $(MAIN) $(OBJS) $(LDFLAGS)
 
-$(BINDIR)/%.o: src/%.c
+$(BUILDIR)/%.o: src/%.c
 	$(CC) -o $@ -c $(CCFLAGS) $<
 
-$(OBJS): | $(BINDIR)
+$(OBJS): | $(BUILDIR) $(BINDIR)
 
+$(BUILDIR):
+	mkdir $@
 $(BINDIR):
 	mkdir $@
 
