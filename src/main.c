@@ -20,21 +20,12 @@
 
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <libssh/libssh.h>
 #include "main.h"
 #include "match.h"
 #include "sockets.h"
 #include "socks.h"
 #include "trace.h"
-
-#ifdef WIN32
-#include <winsock.h>
-#else
-#include <sys/socket.h>
-#endif
-
-#include <libssh/libssh.h>
 
 #if defined WIN32 && !defined MINGW32
 #define FD_SET_SIZE(set) (set).fd_count

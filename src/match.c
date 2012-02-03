@@ -19,16 +19,10 @@
  */
 
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "match.h"
 
 int matching(char *text, char *pattern) {
     char *orig_pattern = pattern;
-    //char *orig_text = text;
-
-    //printf("%s\t~\t%s", text, pattern);
 
     /* matching beginning */
     if (*pattern == '^')
@@ -36,7 +30,6 @@ int matching(char *text, char *pattern) {
 
     /* run through text */
     for (; *text != '\0'; text++) {
-	//printf("\n %s\t~\t%s", text, pattern);
 
 	/* beginning */
 	if (*pattern == '^')

@@ -22,7 +22,6 @@
 #ifndef TRACE_H
 #define TRACE_H
 
-
 #define TRACE_NO(...)      TRACE(TRACE_LEVEL_NO, __VA_ARGS__)
 #define TRACE_WARNING(...) TRACE(TRACE_LEVEL_WARNING, __VA_ARGS__)
 #define TRACE_INFO(...)    TRACE(TRACE_LEVEL_INFO, __VA_ARGS__)
@@ -32,7 +31,6 @@
 #define TRACEAPPEND(...)   trace_append(__VA_ARGS__)
 #define DUMP(...)          trace_dump(__VA_ARGS__)
 
-/* debugging */
 #if defined(_DEBUG) || defined(_DEBUG_)
 #define TRACE(...)         trace(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define DEBUG              TRACE(TRACE_LEVEL_NO, "DEBUG:\n");
@@ -44,13 +42,6 @@
 #define DEBUG_ENTER
 #define DEBUG_LEAVE
 #endif
-
-#ifdef WIN32
-#define EOL "\n"
-#else
-#define EOL "\n"
-#endif
-
 
 enum TRACE_LEVEL {
     TRACE_LEVEL_NO,
@@ -65,6 +56,5 @@ void trace(const char *, const int,
 void trace_append(enum TRACE_LEVEL, const char *, ...);
 void trace_dump(const void *, int);
 void trace_memory();
-
 
 #endif				/* TRACE_H */

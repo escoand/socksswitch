@@ -38,7 +38,6 @@
 #endif
 #define SOCKET_DATA_MAX 16384
 
-
 typedef enum {
     SOCKET_TYPE_LISTEN,
     SOCKET_TYPE_CLIENT,

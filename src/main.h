@@ -27,12 +27,6 @@
 #define DESC    "forwards socks connection on basis of filter rules"
 #define RIGHTS  "Copyright (C) 2011-2012 Andreas Schoenfelder"
 
-#ifdef WIN32
-#include <winsock.h>
-#endif
-#include <libssh/libssh.h>
-
-
 typedef struct {
     char host[256];
     int port;

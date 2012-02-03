@@ -22,7 +22,6 @@
 #ifndef SOCKS_H
 #define SOCKS_H
 
-
 typedef struct {
     unsigned char ver;
     unsigned char cmd;

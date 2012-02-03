@@ -23,14 +23,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <stdio.h>
 #include "trace.h"
 
 #ifdef WIN32
-#include <windows.h>
+#include <windef.h>
 #include <psapi.h>
+#include <windows.h>
 #endif
-
 
 void
 trace(const char *file, const int line, const char *function,
@@ -151,7 +150,7 @@ void trace_dump(const void *data, int len) {
 		fprintf(output, "%c", ((unsigned char *) data)[j]);
 	}
 
-	fprintf(output, EOL);
+	fprintf(output, "\n");
     }
 
     /*  close log file */

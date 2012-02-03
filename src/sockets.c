@@ -19,25 +19,9 @@
  */
 
 
-#ifdef WIN32
-#include <winsock.h>
-#include <io.h>
-#else
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <libssh/libssh.h>
 #include "sockets.h"
 #include "trace.h"
-
 
 /* init winsock */
 void socksswitch_init() {
