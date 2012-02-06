@@ -289,6 +289,8 @@ socksswitch_ssh_send(ssh_channel * channel,
 
 /* wrapper for socket closing */
 int socksswitch_close(const int sock) {
+    char addrstr[256];
+
     DEBUG_ENTER;
 
     if (sock <= 0) {
@@ -296,17 +298,17 @@ int socksswitch_close(const int sock) {
 	return 0;
     }
 
+    strcpy(addrstr, socksswitch_addr(sock));
+
     /* disconnect */
     if (shutdown(sock, SD_BOTH) == 0 && SOCKET_CLOSE(sock) == 0)
-	TRACE_INFO("disconnected from %s (socket:%i)\n",
-		   socksswitch_addr(sock), sock);
+	TRACE_INFO("disconnected from %s (socket:%i)\n", addrstr, sock);
 
     /* error */
     else {
 	TRACE_WARNING
 	    ("failure on closing from %s (socket:%i err:%i): %s\n",
-	     socksswitch_addr(sock), sock, SOCKET_ERROR_CODE,
-	     socketError());
+	     addrstr, sock, SOCKET_ERROR_CODE, socketError());
 	DEBUG_LEAVE;
 	return SOCKET_ERROR;
     }
