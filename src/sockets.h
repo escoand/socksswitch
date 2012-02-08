@@ -25,18 +25,19 @@
 #include <libssh/libssh.h>
 
 #ifdef WIN32
-#define SOCKET_ADDR_LEN int
-#define SOCKET_DATA_LEN int
-#define SOCKET_CLOSE closesocket
+#define SOCKET_ADDR_LEN   int
+#define SOCKET_DATA_LEN   int
+#define SOCKET_CLOSE      closesocket
 #define SOCKET_ERROR_CODE WSAGetLastError()
 #else
-#define SOCKET_ADDR_LEN socklen_t
-#define SOCKET_DATA_LEN size_t
-#define SOCKET_CLOSE close
-#define SOCKET_ERROR -1
+#define SD_BOTH           2
+#define SOCKET_ADDR_LEN   socklen_t
+#define SOCKET_DATA_LEN   size_t
+#define SOCKET_CLOSE      close
+#define SOCKET_ERROR      -1
 #define SOCKET_ERROR_CODE errno
 #endif
-#define SOCKET_DATA_MAX 16384
+#define SOCKET_DATA_MAX   16384
 
 typedef enum {
     SOCKET_TYPE_LISTEN,

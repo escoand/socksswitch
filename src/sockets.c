@@ -19,6 +19,12 @@
  */
 
 
+#ifndef WIN32
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#endif
 #include <stdio.h>
 #include "sockets.h"
 #include "trace.h"
@@ -90,7 +96,8 @@ int socksswitch_accept(const int sock) {
 
 /* wrapper for socket connecting */
 int socksswitch_ssh_connect(ssh_session * session, const char *host,
-			    const int port, ssh_channel * channel) {
+			    const SOCKET_DATA_LEN port,
+			    ssh_channel * channel) {
     DEBUG_ENTER;
 
     if (!ssh_is_connected(*session))

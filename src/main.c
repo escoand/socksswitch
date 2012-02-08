@@ -19,6 +19,10 @@
  */
 
 
+#ifndef WIN32
+#include <stdlib.h>
+#include <string.h>
+#endif
 #include <stdio.h>
 #include <libssh/libssh.h>
 #include "main.h"
@@ -553,6 +557,9 @@ int forward(const int sock, ssh_channel * channel,
 /* clean shutdown of sockets */
 void cleanEnd(const int sock) {
     unsigned int i;
+    
+    if(sock<=0)
+    return;
 
     DEBUG_ENTER;
 
