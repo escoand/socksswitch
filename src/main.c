@@ -275,6 +275,8 @@ void showHelp(char *binary) {
     printf("\n");
     printf("Usage: %s [OPTION]...\n", binary);
     printf("\n");
+    printf
+	("  -c <file>  Read config from <file> instead socksswitch.cfg.\n");
     printf("  -d         Dump datagram data (huge output).\n");
     printf("  -h         Display this help message.\n");
     printf("  -l <file>  Log to <file> instead STDOUT/STDERR.\n");
@@ -301,7 +303,13 @@ void readParams(const int argc, char *argv[]) {
 	    exit(1);
 	}
 
-	/* logfile */
+	/* config file */
+	else if (strcmp(argv[i], "-c") == 0) {
+	    sprintf(tmp, "CFGFILE=%s", argv[++i]);
+	    putenv(tmp);
+	}
+
+	/* log file */
 	else if (strcmp(argv[i], "-l") == 0) {
 	    sprintf(tmp, "LOGFILE=%s", argv[++i]);
 	    putenv(tmp);
@@ -331,6 +339,7 @@ void readParams(const int argc, char *argv[]) {
 
 /* read config file */
 int readConfig() {
+    char *filename = "socksswitch.cfg";
     FILE *cfgfile = NULL;
     char cfgline[1024];
     char cfgtype[256];
@@ -338,10 +347,16 @@ int readConfig() {
 
     DEBUG_ENTER;
 
+    /* get config file */
+    if (getenv("CFGFILE") != NULL)
+	filename = getenv("CFGFILE");
+
+    TRACE_INFO("read config (file:%s)\n", filename);
+
     /* open config file */
-    cfgfile = fopen("socksswitch.cfg", "r");
+    cfgfile = fopen(filename, "r");
     if (!cfgfile) {
-	TRACE_ERROR("unable to open config file\n");
+	TRACE_ERROR("unable to open config file %s.\n", filename);
 	exit(1);
     }
 
