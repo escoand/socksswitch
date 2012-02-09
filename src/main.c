@@ -29,6 +29,7 @@
 #include "match.h"
 #include "sockets.h"
 #include "socks.h"
+#include "ssh.h"
 #include "trace.h"
 
 #if defined WIN32 && !defined MINGW32

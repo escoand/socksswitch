@@ -22,8 +22,6 @@
 #ifndef SOCKETS_H
 #define SOCKETS_H
 
-#include <libssh/libssh.h>
-
 #ifdef WIN32
 #define SOCKET_ADDR_LEN   int
 #define SOCKET_DATA_LEN   int
@@ -53,17 +51,8 @@ SOCKET_DATA_LEN socksswitch_recv(const int, char *);
 int socksswitch_send(const int, const char *, const SOCKET_DATA_LEN);
 int socksswitch_close(const int);
 
-int socksswitch_ssh_connect(ssh_session *, const char *,
-			    const SOCKET_DATA_LEN, ssh_channel *);
-SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel *, char *);
-int socksswitch_ssh_send(ssh_channel *, const char *,
-			 const SOCKET_DATA_LEN);
-int socksswitch_ssh_close(ssh_channel *);
-
 int masterSocket(const int);
 int clientSocket(const char *, const int);
-int sshSocket(const char *, const int, const char *, const char *,
-	      const char *, ssh_session *);
 
 const char *socketError();
 

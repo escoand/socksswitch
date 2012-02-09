@@ -24,7 +24,7 @@ LDFLAGS   = -Llib/ -lssh
 BUILDIR   = build
 BINDIR    = bin
 MAIN      = socksswitch
-OBJS      = main.o match.o sockets.o socks.o trace.o
+OBJS      = main.o match.o sockets.o socks.o ssh.o trace.o
 
 
 # windows config
