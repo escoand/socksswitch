@@ -558,9 +558,9 @@ int forward(const int sock, ssh_channel * channel,
 /* clean shutdown of sockets */
 void cleanEnd(const int sock) {
     unsigned int i;
-    
-    if(sock<=0)
-    return;
+
+    if (sock <= 0)
+	return;
 
     DEBUG_ENTER;
 
