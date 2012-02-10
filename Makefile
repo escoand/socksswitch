@@ -21,10 +21,11 @@
 CC       ?= gcc
 CCFLAGS   = -O3 -Wall -Isrc/ -Iinclude/
 LDFLAGS   = -Llib/ -lssh
-BUILDIR   = build
+BUILDDIR  = build
 BINDIR    = bin
 MAIN      = socksswitch
-OBJS      = main.o match.o sockets.o socks.o ssh.o trace.o
+DRV       = socksswitchdrv
+OBJS      = inject.o main.o match.o sockets.o socks.o ssh.o trace.o
 
 
 # windows config
@@ -32,14 +33,17 @@ ifeq ($(OS), Windows_NT)
 CC        = gcc
 LDFLAGS  += -lws2_32 -lpsapi
 MAIN     := $(MAIN).exe
+DRV      := $(DRV).dll
 endif
 
 
-OBJS     := $(addprefix $(BUILDIR)/,$(OBJS))
+OBJS     := $(addprefix $(BUILDDIR)/,$(OBJS))
 MAIN     := $(addprefix $(BINDIR)/,$(MAIN))
+DRV      := $(addprefix c:/programme/ultravnc/,$(DRV))
 
 
-all: $(MAIN)
+all: $(MAIN) $(DRV)
+drv: $(DRV)
 
 debug: CCFLAGS += -g -D_DEBUG -D_DEBUG_
 debug: all
@@ -55,12 +59,15 @@ mingw32: all
 $(MAIN): $(OBJS)
 	$(CC) -o $(MAIN) $(OBJS) $(LDFLAGS)
 
-$(BUILDIR)/%.o: src/%.c
+$(DRV): $(BUILDDIR)/drv.o
+	$(CC) -o $(DRV) $< $(BUILDDIR)/trace.o $(LDFLAGS) -shared
+
+$(BUILDDIR)/%.o: src/%.c
 	$(CC) -o $@ -c $(CCFLAGS) $<
 
-$(OBJS): | $(BUILDIR) $(BINDIR)
+$(OBJS): | $(BUILDDIR) $(BINDIR)
 
-$(BUILDIR):
+$(BUILDDIR):
 	mkdir $@
 $(BINDIR):
 	mkdir $@
@@ -70,4 +77,3 @@ upx: $(MAIN)
 
 clean:
 	$(RM) $(MAIN) $(OBJS)
-

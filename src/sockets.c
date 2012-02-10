@@ -249,7 +249,8 @@ int masterSocket(const int port) {
     if (bind
 	(rc, (struct sockaddr *) &addr,
 	 sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
-	TRACE_ERROR("failure on binding socket: %i\n", SOCKET_ERROR_CODE);
+	TRACE_ERROR("failure on binding socket (err:%i): %s\n",
+		    SOCKET_ERROR_CODE, socketError());
 	DEBUG_LEAVE;
 	exit(1);
     }
@@ -259,7 +260,8 @@ int masterSocket(const int port) {
 
     /* listen master socket */
     if (listen(rc, 128) == SOCKET_ERROR) {
-	TRACE_ERROR("failure on listening: %i\n", SOCKET_ERROR_CODE);
+	TRACE_ERROR("failure on listening (err:%i): %s\n",
+		    SOCKET_ERROR_CODE, socketError());
 	DEBUG_LEAVE;
 	exit(1);
     }
@@ -283,9 +285,8 @@ int clientSocket(const char *host, const int port) {
 
     /* error */
     if (sock <= 0) {
-	TRACE_ERROR("failure on creating socket (err: %i): ",
-		    SOCKET_ERROR_CODE);
-	socketError();
+	TRACE_ERROR("failure on creating socket (err:%i): %s\n",
+		    SOCKET_ERROR_CODE, socketError());
 	DEBUG_LEAVE;
 	return 0;
     }

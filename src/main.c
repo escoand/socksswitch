@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-
+#include "inject.h"
 
 #ifndef WIN32
 #include <stdlib.h>
@@ -61,6 +61,14 @@ int main(int argc, char *argv[]) {
     /* read params and config */
     readParams(argc, argv);
     masterport = readConfig();
+
+    DWORD pID = getProcId("C:\\WINDOWS\\system32\\mstsc.exe");
+    if (inject(pID, "c:\\programme\\ultravnc\\socksswitchdrv.dll"))
+	TRACE_WARNING("injected pid:%i\n", pID);
+    pID = getProcId("C:\\program files\\ultravnc\\vncviewer.exe");
+    if (inject(pID, "c:\\programme\\ultravnc\\socksswitchdrv.dll"))
+	TRACE_WARNING("injected pid:%i\n", pID);
+
 
     DEBUG;
 
