@@ -1,0 +1,2 @@
+*.c	ident filter=indent eol=lf
+*.h	ident filter=indent eol=lf
