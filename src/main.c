@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-#include "inject.h"
+
 
 #ifndef WIN32
 #include <stdlib.h>
@@ -25,6 +25,7 @@
 #endif
 #include <stdio.h>
 #include <libssh/libssh.h>
+#include "inject.h"
 #include "main.h"
 #include "match.h"
 #include "sockets.h"
@@ -40,12 +41,14 @@
 #define FD_SET_DATA(set, i) __FDS_BITS(&set)[i]
 #endif
 
+#define SOCKSSWITCH_DRV "C:\\Documents and Settings\\aschoenf\\My Documents\\socksswitch\\bin\\socksswitchdrv.dll"
 
 fd_set sockets_set, read_set;
 FORWARD_DESTINATION destinations[32];
 FORWARD_PAIR forwards[32];
+char captures[32][256];
 int destinations_count = 0;
-
+int captures_count = 0;
 
 int main(int argc, char *argv[]) {
     int rc;
@@ -54,6 +57,10 @@ int main(int argc, char *argv[]) {
     ssh_channel channel, channels_in[32], channels_out[32];
     FORWARD_DESTINATION *dst = NULL;
     char dst_host[256];
+    struct timeval to;
+
+    to.tv_sec = 1;
+    to.tv_usec = 0;
 
     /* default */
     putenv((char *) "TRACE=2");
@@ -61,14 +68,6 @@ int main(int argc, char *argv[]) {
     /* read params and config */
     readParams(argc, argv);
     masterport = readConfig();
-
-    DWORD pID = getProcId("C:\\WINDOWS\\system32\\mstsc.exe");
-    if (inject(pID, "c:\\programme\\ultravnc\\socksswitchdrv.dll"))
-	TRACE_WARNING("injected pid:%i\n", pID);
-    pID = getProcId("C:\\program files\\ultravnc\\vncviewer.exe");
-    if (inject(pID, "c:\\programme\\ultravnc\\socksswitchdrv.dll"))
-	TRACE_WARNING("injected pid:%i\n", pID);
-
 
     DEBUG;
 
@@ -133,7 +132,16 @@ int main(int argc, char *argv[]) {
 	/* wait for socket actions */
 	read_set = sockets_set;
 	rc = ssh_select(channels_in, channels_out, socket_max + 1,
-			&read_set, 0);
+			&read_set, &to);
+
+	DEBUG;
+
+	/* timout - try to inject */
+	if (rc == 0) {
+	    for (i = 0; i < captures_count; i++)
+		socksswitch_inject(captures[i], SOCKSSWITCH_DRV);
+	    continue;
+	}
 
 	DEBUG;
 
@@ -171,6 +179,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	DEBUG;
+
 	/* client socket action */
 	for (i = 0; i < FD_SET_SIZE(read_set); i++) {
 
@@ -425,6 +434,10 @@ int readConfig() {
 		   [destinations
 		    [destinations_count - 1].filters_count++], filter);
 	}
+
+	/* get capture file */
+	else if (strcmp(cfgtype, "capture") == 0)
+	    sscanf(cfgline, "%*s \"%[^\"]\"", captures[captures_count++]);
     }
 
     /* close config file */

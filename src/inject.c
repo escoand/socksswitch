@@ -20,78 +20,111 @@
 
 
 #include <windows.h>
+#include <io.h>
 #include <string.h>
 #include <tlhelp32.h>
 #include "inject.h"
 #include "trace.h"
 
-BOOL inject(int pid, const char *dll) {
-    HANDLE hProc;
-    FARPROC pLL;
-    LPVOID radr;
-    DWORD br;
-
-    if (!pid)
-	return FALSE;
-
-    if ((pLL =
-	 GetProcAddress(LoadLibrary("kernel32.dll"),
-			"LoadLibraryA")) == NULL)
-	return FALSE;
-    if ((hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid)) == NULL)
-	return FALSE;
-    if ((radr =
-	 VirtualAllocEx(hProc, NULL, strlen(dll), MEM_COMMIT | MEM_RESERVE,
-			PAGE_EXECUTE_READWRITE)) == 0)
-	return FALSE;
-    if (WriteProcessMemory(hProc, radr, (LPVOID) dll, strlen(dll), &br) ==
-	0)
-	return FALSE;
-    if (NULL ==
-	CreateRemoteThread(hProc, 0, 0, (LPTHREAD_START_ROUTINE) pLL, radr,
-			   0, 0))
-	return FALSE;
-
-    return TRUE;
-}
-
-DWORD getProcId(const char *path) {
+int socksswitch_inject(char *path, const char *dll) {
+    char *filename;
     PROCESSENTRY32 pe;
     MODULEENTRY32 me;
-    HANDLE snapProc;
-    HANDLE snapMod;
-    const char *file = strrchr(path, '\\') + 1;
+    HANDLE snapshot_proc, snapshow_mod, proc;
+    FARPROC load;
+    LPVOID addr;
+    BOOL inj;
 
-    snapProc = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapProc == INVALID_HANDLE_VALUE) {
+    /* try to read file */
+    if (access(dll, 04) != 0) {
+	TRACE_WARNING("unable to read %s\n", dll);
+	return 0;
+    }
+
+    //path = realpath(path, NULL);
+    filename = strrchr(path, '\\') + 1;
+
+    /* snapshot process */
+    snapshot_proc = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot_proc == INVALID_HANDLE_VALUE) {
 	TRACE_WARNING
 	    ("failure on creating toolhelp snapshot(err:%d)\n ",
 	     GetLastError());
-	return FALSE;
+	return 0;
     }
 
     pe.dwSize = sizeof(pe);
     me.dwSize = sizeof(me);
 
     /* run processes */
-    while (Process32Next(snapProc, &pe)) {
-	if (strcasecmp(pe.szExeFile, file) == 0) {
-	    snapMod =
-		CreateToolhelp32Snapshot(TH32CS_SNAPMODULE,
-					 pe.th32ProcessID);
-	    if (snapMod == INVALID_HANDLE_VALUE) {
-		TRACE_WARNING
-		    ("failure on creating toolhelp snapshot(err:%d)\n",
-		     GetLastError());
-		return FALSE;
-	    }
+    while (Process32Next(snapshot_proc, &pe)) {
+	inj = FALSE;
 
-	    /* run modules */
-	    while (Module32Next(snapMod, &me))
-		if (strcasecmp(me.szExePath, path) == 0)
-		    return pe.th32ProcessID;
+	/* check exe name */
+	if (strcasecmp(pe.szExeFile, filename) != 0)
+	    continue;
+
+	/* snapshot modules */
+	snapshow_mod = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE,
+						pe.th32ProcessID);
+	if (snapshow_mod == INVALID_HANDLE_VALUE) {
+	    TRACE_WARNING
+		("failure on creating toolhelp snapshot(err:%d)\n",
+		 GetLastError());
+	    return 0;
+	}
+
+	/* run modules */
+	while (Module32Next(snapshow_mod, &me)) {
+
+	    /* check exe path */
+	    if (strcasecmp(me.szExePath, path) == 0)
+		inj = TRUE;
+
+	    /* check if allready injected */
+	    else if (strcasecmp(me.szExePath, dll) == 0) {
+		inj = FALSE;
+		break;
+	    }
+	}
+
+	/* inject */
+	if (inj) {
+
+	    /* address of load library */
+	    if ((load =
+		 GetProcAddress(LoadLibrary("kernel32.dll"),
+				"LoadLibraryA")) == NULL)
+		return 0;
+
+	    /* open process */
+	    if ((proc =
+		 OpenProcess(PROCESS_ALL_ACCESS, 0,
+			     pe.th32ProcessID)) == NULL)
+		return 0;
+
+	    /* access */
+	    if ((addr =
+		 VirtualAllocEx(proc, NULL, strlen(dll),
+				MEM_COMMIT | MEM_RESERVE,
+				PAGE_EXECUTE_READWRITE)) == 0)
+		return 0;
+
+	    /* write dll path */
+	    if (WriteProcessMemory
+		(proc, addr, (LPVOID) dll, strlen(dll), NULL) == 0)
+		return 0;
+
+	    /* load library */
+	    if (CreateRemoteThread(proc, 0, 0,
+				   (LPTHREAD_START_ROUTINE) load, addr,
+				   0, 0) == NULL)
+		return 0;
+
+	    TRACE_INFO("injected into \"%s\" (pid:%i)\n", path,
+		       pe.th32ProcessID);
 	}
     }
 
-    return FALSE;
+    return 1;
 }

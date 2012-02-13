@@ -21,5 +21,4 @@
 
 #include <windows.h>
 
-BOOL inject(int, const char *);
-DWORD getProcId(const char *);
+int socksswitch_inject(char *, const char *);

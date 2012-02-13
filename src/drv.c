@@ -20,15 +20,26 @@
 
 
 #include <windows.h>
+#include <tlhelp32.h>
+#include <stdio.h>
 #include "drv.h"
 
 #define SIZE 6
-
-BYTE JMP[SIZE] = { 0xE9, 0x90, 0x90, 0x90, 0x90, 0xC3 };
-BYTE org_bytes[SIZE] = { 0 };
+#define WINDOW_TITLE_APPEND " via socksswitch"
 
 DWORD org_protect;
-org_connect org_address = NULL;
+
+BYTE jmp_connect[SIZE] = { 0xE9, 0x90, 0x90, 0x90, 0x90, 0xC3 };
+BYTE jmp_SetWindowText[SIZE] = { 0xE9, 0x90, 0x90, 0x90, 0x90, 0xC3 };
+
+BYTE org_bytes_connect[SIZE] = { 0 };
+BYTE org_bytes_SetWindowText[SIZE] = { 0 };
+
+typedef int (WINAPI * type_connect) (SOCKET, const struct sockaddr *, int);
+typedef BOOL(WINAPI * type_SetWindowText) (HWND, LPCTSTR);
+
+type_connect addr_connect = NULL;
+type_SetWindowText addr_SetWindowText = NULL;
 
 INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
     HWND h;
@@ -39,50 +50,100 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 
 	/* hook */
     case DLL_PROCESS_ATTACH:
+	hook(0);
 
-	org_address = (org_connect)
-	    GetProcAddress(GetModuleHandle("ws2_32.dll"), "connect");
-
-	if (org_address != NULL) {
-
-	    /* get access */
-	    VirtualProtect((LPVOID) org_address, SIZE,
-			   PAGE_EXECUTE_READWRITE, &org_protect);
-
-	    /* save bytes */
-	    memcpy(org_bytes, org_address, SIZE);
-
-	    /* get jmp */
-	    DWORD JMPSize = (DWORD) new_connect - (DWORD) org_address - 5;
-	    memcpy(&JMP[1], &JMPSize, 4);
-
-	    /* hook */
-	    memcpy(org_address, JMP, SIZE);
-	    VirtualProtect((LPVOID) org_address, SIZE, org_protect, NULL);
-
-	    /* window text */
-	    h = GetTopWindow(0);
-	    while (h) {
-		GetWindowThreadProcessId(h, (PDWORD) & pid);
-		if (pid == GetCurrentProcessId()) {
-		    GetWindowText(h, txt, sizeof(txt));
-		    strcat(txt, " via socksswitch");
-		    SetWindowText(h, txt);
-		}
-		h = GetNextWindow(h, GW_HWNDNEXT);
+	/* window text */
+	h = GetTopWindow(0);
+	while (h) {
+	    GetWindowThreadProcessId(h, (PDWORD) & pid);
+	    if (pid == GetCurrentProcessId()) {
+		GetWindowText(h, txt, sizeof(txt));
+		SetWindowText(h, txt);
 	    }
+	    h = GetNextWindow(h, GW_HWNDNEXT);
 	}
+
 	break;
 
 	/* unhook */
     case DLL_PROCESS_DETACH:
-	memcpy(org_address, org_bytes, SIZE);
+	unhook(0);
+	break;
 
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
 	break;
     }
+
     return TRUE;
+}
+
+void hook(int func) {
+    DWORD jmp_size;
+
+    if (func == 0 || func == 1) {
+	/* get address of connect */
+	addr_connect =
+	    (type_connect) GetProcAddress(GetModuleHandle("ws2_32.dll"),
+					  "connect");
+	if (addr_connect != NULL) {
+
+	    /* get access */
+	    VirtualProtect((LPVOID) addr_connect, SIZE,
+			   PAGE_EXECUTE_READWRITE, &org_protect);
+
+	    /* save bytes */
+	    memcpy(org_bytes_connect, addr_connect, SIZE);
+
+	    /* get jmp */
+	    jmp_size = (DWORD) new_connect - (DWORD) addr_connect - 5;
+	    memcpy(&jmp_connect[1], &jmp_size, 4);
+
+	    /* hook */
+	    memcpy(addr_connect, jmp_connect, SIZE);
+	    VirtualProtect((LPVOID) addr_connect, SIZE, org_protect, NULL);
+	}
+    }
+
+    if (func == 0 || func == 2) {
+	/* get address of SetWindowText */
+	addr_SetWindowText = (type_SetWindowText)
+	    GetProcAddress(GetModuleHandle("user32.dll"),
+			   "SetWindowTextA");
+	if (addr_SetWindowText != NULL) {
+
+	    /* get access */
+	    VirtualProtect((LPVOID) addr_SetWindowText, SIZE,
+			   PAGE_EXECUTE_READWRITE, &org_protect);
+
+	    /* save bytes */
+	    memcpy(org_bytes_SetWindowText, addr_SetWindowText, SIZE);
+
+	    /* get jmp */
+	    jmp_size =
+		(DWORD) new_SetWindowText - (DWORD) addr_SetWindowText - 5;
+	    memcpy(&jmp_SetWindowText[1], &jmp_size, 4);
+
+	    /* hook */
+	    memcpy(addr_SetWindowText, jmp_SetWindowText, SIZE);
+	    VirtualProtect((LPVOID) addr_SetWindowText, SIZE, org_protect,
+			   NULL);
+	}
+    }
+}
+
+void unhook(int func) {
+    if (addr_connect != NULL && (func == 0 || func == 1)) {
+	VirtualProtect((void *) addr_connect, SIZE, PAGE_EXECUTE_READWRITE,
+		       NULL);
+	memcpy(addr_connect, org_bytes_connect, SIZE);
+    }
+
+    if (addr_SetWindowText != NULL && (func == 0 || func == 2)) {
+	VirtualProtect((void *) addr_SetWindowText, SIZE,
+		       PAGE_EXECUTE_READWRITE, NULL);
+	memcpy(addr_SetWindowText, org_bytes_SetWindowText, SIZE);
+    }
 }
 
 int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
@@ -99,22 +160,15 @@ int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
     /* addr */
     memcpy(&in_addr, addr, sizeof(in_addr));
     out_addr.sin_family = AF_INET;
-    out_addr.sin_port = htons(1080);
+    out_addr.sin_port = htons(1081);
     out_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    /* unhook */
-    VirtualProtect((void *) org_address, SIZE, PAGE_EXECUTE_READWRITE,
-		   NULL);
-    memcpy(org_address, org_bytes, SIZE);
-
     /* connect */
+    unhook(1);
     rc = connect(s, (struct sockaddr *) (&out_addr),
 		 sizeof(struct sockaddr_in));
+    hook(1);
     err = WSAGetLastError();
-
-    /* rehook */
-    memcpy(org_address, JMP, SIZE);
-    VirtualProtect((LPVOID) org_address, SIZE, org_protect, NULL);
 
     if (rc != 0 && err != WSAEWOULDBLOCK) {
 	closesocket(s);
@@ -153,4 +207,21 @@ int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
     }
 
     return 0;
+}
+
+BOOL WINAPI new_SetWindowText(HWND h, LPCTSTR text) {
+    BOOL rc;
+    char title[1024];
+
+    /* get title */
+    strcpy(title, text);
+    if (IsWindow(h) && strstr(text, WINDOW_TITLE_APPEND) == NULL)
+	strcat(title, WINDOW_TITLE_APPEND);
+
+    /* set window text */
+    unhook(2);
+    rc = SetWindowText(h, title);
+    hook(2);
+
+    return rc;
 }

@@ -19,5 +19,11 @@
  */
 
 
-typedef int (WINAPI * org_connect) (SOCKET, const struct sockaddr *, int);
+#include <windows.h>
+#include <winsock2.h>
+
+void hook();
+void unhook();
+
 int WINAPI new_connect(SOCKET, const struct sockaddr *, int);
+BOOL WINAPI new_SetWindowText(HWND, LPCTSTR);
