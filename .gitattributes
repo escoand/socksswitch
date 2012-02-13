@@ -1,2 +1,2 @@
-*.c	crlf ident filter=indent eol=lf
-*.h	crlf ident filter=indent eol=lf
+*.c	crlf filter=indent eol=lf
+*.h	crlf filter=indent eol=lf

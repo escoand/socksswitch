@@ -23,7 +23,7 @@
 #define MAIN_H
 
 #define NAME    "socksswitch"
-#define VERSION "$Id$"
+#define VERSION "20120213"
 #define DESC    "forwards socks connection on basis of filter rules"
 #define RIGHTS  "Copyright (C) 2011-2012 Andreas Schoenfelder"
 
