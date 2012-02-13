@@ -20,13 +20,9 @@
 
 
 #include <windows.h>
-#include <stdio.h>
-#include "trace.h"
+#include "drv.h"
 
 #define SIZE 6
-
-typedef int (WINAPI * org_connect) (SOCKET, const struct sockaddr *, int);
-int WINAPI new_connect(SOCKET, const struct sockaddr *, int);
 
 BYTE JMP[SIZE] = { 0xE9, 0x90, 0x90, 0x90, 0x90, 0xC3 };
 BYTE org_bytes[SIZE] = { 0 };
@@ -43,9 +39,6 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 
 	/* hook */
     case DLL_PROCESS_ATTACH:
-
-	putenv("TRACE=1");
-	putenv("LOGFILE=c:\\log.txt");
 
 	org_address = (org_connect)
 	    GetProcAddress(GetModuleHandle("ws2_32.dll"), "connect");

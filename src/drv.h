@@ -19,7 +19,5 @@
  */
 
 
-#include <windows.h>
-
-BOOL inject(int, const char *);
-DWORD getProcId(const char *);
+typedef int (WINAPI * org_connect) (SOCKET, const struct sockaddr *, int);
+int WINAPI new_connect(SOCKET, const struct sockaddr *, int);

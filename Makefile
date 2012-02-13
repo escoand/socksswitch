@@ -39,7 +39,7 @@ endif
 
 OBJS     := $(addprefix $(BUILDDIR)/,$(OBJS))
 MAIN     := $(addprefix $(BINDIR)/,$(MAIN))
-DRV      := $(addprefix c:/programme/ultravnc/,$(DRV))
+DRV      := $(addprefix $(BINDIR)/,$(DRV))
 
 
 all: $(MAIN) $(DRV)
@@ -60,7 +60,7 @@ $(MAIN): $(OBJS)
 	$(CC) -o $(MAIN) $(OBJS) $(LDFLAGS)
 
 $(DRV): $(BUILDDIR)/drv.o
-	$(CC) -o $(DRV) $< $(BUILDDIR)/trace.o $(LDFLAGS) -shared
+	$(CC) -o $(DRV) $< $(LDFLAGS) -shared
 
 $(BUILDDIR)/%.o: src/%.c
 	$(CC) -o $@ -c $(CCFLAGS) $<
@@ -76,4 +76,4 @@ upx: $(MAIN)
 	upx $(MAIN)
 
 clean:
-	$(RM) $(MAIN) $(OBJS)
+	$(RM) $(MAIN) $(DRV) $(OBJS)
