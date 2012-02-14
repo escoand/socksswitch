@@ -72,8 +72,8 @@ $(BUILDDIR):
 $(BINDIR):
 	mkdir $@
 
-upx: $(MAIN)
-	upx $(MAIN)
+upx: $(MAIN) $(DRV)
+	upx $^
 
 clean:
 	$(RM) $(MAIN) $(DRV) $(OBJS)
