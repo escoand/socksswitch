@@ -57,10 +57,10 @@ mingw32: all
 
 
 $(MAIN): $(OBJS)
-	$(CC) -o $(MAIN) $(OBJS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS)
 
-$(DRV): $(BUILDDIR)/drv.o
-	$(CC) -o $(DRV) $< $(LDFLAGS) -shared
+$(DRV): $(BUILDDIR)/drv.o $(BUILDDIR)/sockets.o $(BUILDDIR)/trace.o
+	$(CC) -o $@ $^ $(LDFLAGS) -shared
 
 $(BUILDDIR)/%.o: src/%.c
 	$(CC) -o $@ -c $(CCFLAGS) $<
