@@ -23,6 +23,8 @@
 #include <tlhelp32.h>
 #include <stdio.h>
 #include "drv.h"
+#include "sockets.h"
+#include "trace.h"
 
 #define SIZE 6
 #define WINDOW_TITLE_APPEND " via socksswitch"
@@ -46,10 +48,44 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
     int pid;
     char txt[1024] = "";
 
+#if defined(_DEBUG) || defined(_DEBUG_)
+    putenv("LOGFILE=c:\\socksswitchdrv.log");
+    putenv("TRACE=4");
+    putenv("DUMP=1");
+#endif
+
     switch (Reason) {
 
 	/* hook */
     case DLL_PROCESS_ATTACH:
+
+	/* get address of connect */
+	addr_connect =
+	    (type_connect) GetProcAddress(GetModuleHandle("ws2_32.dll"),
+					  "connect");
+
+	/* save bytes */
+	if (addr_connect != NULL) {
+	    VirtualProtect((LPVOID) addr_connect, SIZE,
+			   PAGE_EXECUTE_READWRITE, &org_protect);
+	    memcpy(org_bytes_connect, addr_connect, SIZE);
+	    VirtualProtect((LPVOID) addr_connect, SIZE, org_protect, NULL);
+	}
+
+	/* get address of SetWindowText */
+	addr_SetWindowText = (type_SetWindowText)
+	    GetProcAddress(GetModuleHandle("user32.dll"),
+			   "SetWindowTextA");
+
+	/* save bytes */
+	if (addr_SetWindowText != NULL) {
+	    VirtualProtect((LPVOID) addr_SetWindowText, SIZE,
+			   PAGE_EXECUTE_READWRITE, &org_protect);
+	    memcpy(org_bytes_SetWindowText, addr_SetWindowText, SIZE);
+	    VirtualProtect((LPVOID) addr_SetWindowText, SIZE, org_protect,
+			   NULL);
+	}
+
 	hook(0);
 
 	/* window text */
@@ -81,68 +117,41 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 void hook(int func) {
     DWORD jmp_size;
 
-    if (func == 0 || func == 1) {
-	/* get address of connect */
-	addr_connect =
-	    (type_connect) GetProcAddress(GetModuleHandle("ws2_32.dll"),
-					  "connect");
-	if (addr_connect != NULL) {
-
-	    /* get access */
-	    VirtualProtect((LPVOID) addr_connect, SIZE,
-			   PAGE_EXECUTE_READWRITE, &org_protect);
-
-	    /* save bytes */
-	    memcpy(org_bytes_connect, addr_connect, SIZE);
-
-	    /* get jmp */
-	    jmp_size = (DWORD) new_connect - (DWORD) addr_connect - 5;
-	    memcpy(&jmp_connect[1], &jmp_size, 4);
-
-	    /* hook */
-	    memcpy(addr_connect, jmp_connect, SIZE);
-	    VirtualProtect((LPVOID) addr_connect, SIZE, org_protect, NULL);
-	}
+    if (addr_connect != NULL && (func == 0 || func == 1)) {
+	VirtualProtect((LPVOID) addr_connect, SIZE,
+		       PAGE_EXECUTE_READWRITE, &org_protect);
+	jmp_size = (DWORD) new_connect - (DWORD) addr_connect - 5;
+	memcpy(&jmp_connect[1], &jmp_size, 4);
+	memcpy(addr_connect, jmp_connect, SIZE);
+	VirtualProtect((LPVOID) addr_connect, SIZE, org_protect, NULL);
     }
 
-    if (func == 0 || func == 2) {
-	/* get address of SetWindowText */
-	addr_SetWindowText = (type_SetWindowText)
-	    GetProcAddress(GetModuleHandle("user32.dll"),
-			   "SetWindowTextA");
-	if (addr_SetWindowText != NULL) {
-
-	    /* get access */
-	    VirtualProtect((LPVOID) addr_SetWindowText, SIZE,
-			   PAGE_EXECUTE_READWRITE, &org_protect);
-
-	    /* save bytes */
-	    memcpy(org_bytes_SetWindowText, addr_SetWindowText, SIZE);
-
-	    /* get jmp */
-	    jmp_size =
-		(DWORD) new_SetWindowText - (DWORD) addr_SetWindowText - 5;
-	    memcpy(&jmp_SetWindowText[1], &jmp_size, 4);
-
-	    /* hook */
-	    memcpy(addr_SetWindowText, jmp_SetWindowText, SIZE);
-	    VirtualProtect((LPVOID) addr_SetWindowText, SIZE, org_protect,
-			   NULL);
-	}
+    if (addr_SetWindowText != NULL && (func == 0 || func == 2)) {
+	VirtualProtect((LPVOID) addr_SetWindowText, SIZE,
+		       PAGE_EXECUTE_READWRITE, &org_protect);
+	jmp_size =
+	    (DWORD) new_SetWindowText - (DWORD) addr_SetWindowText - 5;
+	memcpy(&jmp_SetWindowText[1], &jmp_size, 4);
+	memcpy(addr_SetWindowText, jmp_SetWindowText, SIZE);
+	VirtualProtect((LPVOID) addr_SetWindowText, SIZE, org_protect,
+		       NULL);
     }
 }
 
 void unhook(int func) {
     if (addr_connect != NULL && (func == 0 || func == 1)) {
-	VirtualProtect((void *) addr_connect, SIZE, PAGE_EXECUTE_READWRITE,
-		       NULL);
+	VirtualProtect((LPVOID) addr_connect, SIZE,
+		       PAGE_EXECUTE_READWRITE, &org_protect);
 	memcpy(addr_connect, org_bytes_connect, SIZE);
+	VirtualProtect((LPVOID) addr_connect, SIZE, org_protect, NULL);
     }
 
     if (addr_SetWindowText != NULL && (func == 0 || func == 2)) {
-	VirtualProtect((void *) addr_SetWindowText, SIZE,
-		       PAGE_EXECUTE_READWRITE, NULL);
+	VirtualProtect((LPVOID) addr_SetWindowText, SIZE,
+		       PAGE_EXECUTE_READWRITE, &org_protect);
 	memcpy(addr_SetWindowText, org_bytes_SetWindowText, SIZE);
+	VirtualProtect((LPVOID) addr_SetWindowText, SIZE, org_protect,
+		       NULL);
     }
 }
 
@@ -152,6 +161,10 @@ int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
     struct sockaddr_in out_addr;
     char buf[256];
     fd_set set;
+
+#if defined(_DEBUG) || defined(_DEBUG_)
+    DEBUG_ENTER;
+#endif
 
     /* fd_set */
     FD_ZERO(&set);
@@ -167,25 +180,49 @@ int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
     unhook(1);
     rc = connect(s, (struct sockaddr *) (&out_addr),
 		 sizeof(struct sockaddr_in));
-    hook(1);
     err = WSAGetLastError();
+#if defined(_DEBUG) || defined(_DEBUG_)
+    TRACE_NO("connect (rc:%i err:%i pid:%i): %s\n", rc, err,
+	     GetCurrentProcessId(), socketError());
+#endif
+    hook(1);
 
     if (rc != 0 && err != WSAEWOULDBLOCK) {
 	closesocket(s);
+#if defined(_DEBUG) || defined(_DEBUG_)
+	DEBUG_LEAVE;
+#endif
 	return rc;
     }
 
     /* sock5 handshake */
     select(s + 1, NULL, &set, NULL, 0);
     rc = send(s, "\x05\x01\x00", 3, 0);
+#if defined(_DEBUG) || defined(_DEBUG_)
+    err = WSAGetLastError();
+    TRACE_NO("send (rc:%i err:%i pid:%i): %s\n", rc, err,
+	     GetCurrentProcessId(), socketError());
+#endif
     if (rc != 3) {
 	closesocket(s);
+#if defined(_DEBUG) || defined(_DEBUG_)
+	DEBUG_LEAVE;
+#endif
 	return -1;
     }
     select(s + 1, &set, NULL, NULL, 0);
     rc = recv(s, buf, 256, 0);
+#if defined(_DEBUG) || defined(_DEBUG_)
+    err = WSAGetLastError();
+    TRACE_NO("recv (rc:%i err:%i pid:%i): %s\n", rc, err,
+	     GetCurrentProcessId(), socketError());
+    DUMP(buf, rc);
+#endif
     if (rc != 2) {
 	closesocket(s);
+#if defined(_DEBUG) || defined(_DEBUG_)
+	DEBUG_LEAVE;
+#endif
 	return -1;
     }
 
@@ -195,16 +232,37 @@ int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
     memcpy(buf + 8, &in_addr.sin_port, 2);
     select(s + 1, NULL, &set, NULL, 0);
     rc = send(s, buf, 10, 0);
+#if defined(_DEBUG) || defined(_DEBUG_)
+    err = WSAGetLastError();
+    TRACE_NO("send (rc:%i err:%i pid:%i): %s\n", rc, err,
+	     GetCurrentProcessId(), socketError());
+#endif
     if (rc != 10) {
 	closesocket(s);
+#if defined(_DEBUG) || defined(_DEBUG_)
+	DEBUG_LEAVE;
+#endif
 	return -1;
     }
     select(s + 1, &set, NULL, NULL, 0);
     rc = recv(s, buf, 256, 0);
+#if defined(_DEBUG) || defined(_DEBUG_)
+    err = WSAGetLastError();
+    TRACE_NO("recv (rc:%i err:%i pid:%i): %s\n", rc, err,
+	     GetCurrentProcessId(), socketError());
+    DUMP(buf, rc);
+#endif
     if (rc != 10) {
 	closesocket(s);
+#if defined(_DEBUG) || defined(_DEBUG_)
+	DEBUG_LEAVE;
+#endif
 	return -1;
     }
+
+#if defined(_DEBUG) || defined(_DEBUG_)
+	DEBUG_LEAVE;
+#endif
 
     return 0;
 }
