@@ -35,14 +35,18 @@ int socksswitch_inject(char *path, const char *dll) {
     LPVOID addr;
     BOOL inj;
 
+    DEBUG_ENTER;
+
     /* try to read file */
     if (access(dll, 04) != 0) {
 	TRACE_WARNING("unable to read %s\n", dll);
+	DEBUG_LEAVE;
 	return 0;
     }
-
     //path = realpath(path, NULL);
     filename = strrchr(path, '\\') + 1;
+
+    DEBUG;
 
     /* snapshot process */
     snapshot_proc = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -50,11 +54,16 @@ int socksswitch_inject(char *path, const char *dll) {
 	TRACE_WARNING
 	    ("failure on creating toolhelp snapshot(err:%d)\n ",
 	     GetLastError());
+	DEBUG_LEAVE;
 	return 0;
     }
 
+    DEBUG;
+
     pe.dwSize = sizeof(pe);
     me.dwSize = sizeof(me);
+
+    DEBUG;
 
     /* run processes */
     while (Process32Next(snapshot_proc, &pe)) {
@@ -71,8 +80,11 @@ int socksswitch_inject(char *path, const char *dll) {
 	    TRACE_WARNING
 		("failure on creating toolhelp snapshot(err:%d)\n",
 		 GetLastError());
+	    DEBUG_LEAVE;
 	    return 0;
 	}
+
+	DEBUG;
 
 	/* run modules */
 	while (Module32Next(snapshow_mod, &me)) {
@@ -88,14 +100,20 @@ int socksswitch_inject(char *path, const char *dll) {
 	    }
 	}
 
+	DEBUG;
+
 	/* inject */
 	if (inj) {
 
 	    /* address of load library */
 	    if ((load =
 		 GetProcAddress(LoadLibrary("kernel32.dll"),
-				"LoadLibraryA")) == NULL)
+				"LoadLibraryA")) == NULL) {
+		DEBUG_LEAVE;
 		return 0;
+	    }
+
+	    DEBUG;
 
 	    /* open process */
 	    if ((proc =
@@ -103,28 +121,42 @@ int socksswitch_inject(char *path, const char *dll) {
 			     pe.th32ProcessID)) == NULL)
 		return 0;
 
+	    DEBUG;
+
 	    /* access */
 	    if ((addr =
 		 VirtualAllocEx(proc, NULL, strlen(dll),
 				MEM_COMMIT | MEM_RESERVE,
-				PAGE_EXECUTE_READWRITE)) == 0)
+				PAGE_EXECUTE_READWRITE)) == 0) {
+		DEBUG_LEAVE;
 		return 0;
+	    }
+
+	    DEBUG;
 
 	    /* write dll path */
 	    if (WriteProcessMemory
-		(proc, addr, (LPVOID) dll, strlen(dll), NULL) == 0)
+		(proc, addr, (LPVOID) dll, strlen(dll), NULL) == 0) {
+		DEBUG_LEAVE;
 		return 0;
+	    }
+
+	    DEBUG;
 
 	    /* load library */
 	    if (CreateRemoteThread(proc, 0, 0,
 				   (LPTHREAD_START_ROUTINE) load, addr,
-				   0, 0) == NULL)
+				   0, 0) == NULL) {
+		DEBUG_LEAVE;
 		return 0;
+	    }
 
 	    TRACE_INFO("injected into \"%s\" (pid:%i)\n", path,
 		       pe.th32ProcessID);
 	}
     }
+
+    DEBUG_LEAVE;
 
     return 1;
 }

@@ -136,8 +136,8 @@ int main(int argc, char *argv[]) {
 
 	DEBUG;
 
-	/* timout - try to inject */
-	if (rc == 0) {
+	/* try to inject */
+	if (FD_SET_SIZE(read_set) == 0 && channels_out[0] == NULL) {
 	    for (i = 0; i < captures_count; i++)
 		socksswitch_inject(captures[i], SOCKSSWITCH_DRV);
 	    continue;
@@ -580,10 +580,12 @@ int forward(const int sock, ssh_channel * channel,
 void cleanEnd(const int sock) {
     unsigned int i;
 
-    if (sock <= 0)
-	return;
-
     DEBUG_ENTER;
+
+    if (sock <= 0) {
+	DEBUG_LEAVE;
+	return;
+    }
 
     /* disconnect forwardings */
     for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
@@ -610,6 +612,8 @@ void cleanEnd(const int sock) {
 	    forwards[i].channel = NULL;
 	}
     }
+
+    DEBUG;
 
     /* disconnect unforwarded */
     if (FD_ISSET(sock, &sockets_set)) {
