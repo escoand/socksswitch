@@ -26,4 +26,9 @@ void hook();
 void unhook();
 
 int WINAPI new_connect(SOCKET, const struct sockaddr *, int);
+int WINAPI new_WSAConnect(SOCKET,
+			  const struct sockaddr *,
+			  int, LPWSABUF, LPWSABUF, LPQOS, LPQOS);
 BOOL WINAPI new_SetWindowText(HWND, LPCTSTR);
+
+int _init_connection(SOCKET, struct sockaddr_in *);

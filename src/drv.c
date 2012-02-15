@@ -26,7 +26,7 @@
 #include "sockets.h"
 #include "trace.h"
 
-#define COUNT        2
+#define COUNT        3
 #define SIZE         6
 #define TITLE_APPEND " via socksswitch"
 
@@ -35,7 +35,8 @@ BYTE bytes[COUNT][SIZE];
 FARPROC addr[COUNT];
 FARPROC addr_new[COUNT];
 
-INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
+BOOL WINAPI DllMain(HINSTANCE hinstDLL,
+		    DWORD fdwReason, LPVOID lpvReserved) {
     DWORD protect, jmp_size;
     HWND h;
     int i, pid;
@@ -49,7 +50,7 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 
     DEBUG_ENTER;
 
-    switch (Reason) {
+    switch (fdwReason) {
 
 	/* hook */
     case DLL_PROCESS_ATTACH:
@@ -60,12 +61,16 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 	    memcpy(jmp[i], "\xE9\x90\x90\x90\x90\xC3", SIZE);
 	}
 
-	/* get function address */
+	/* function address */
 	addr[0] = GetProcAddress(GetModuleHandle("ws2_32.dll"), "connect");
-	addr[1] = GetProcAddress(GetModuleHandle("user32.dll"),
-				 "SetWindowTextA");
+	addr[1] =
+	    GetProcAddress(GetModuleHandle("ws2_32.dll"), "WSAConnect");
+	addr[2] =
+	    GetProcAddress(GetModuleHandle("user32.dll"),
+			   "SetWindowTextA");
 	addr_new[0] = new_connect;
-	addr_new[1] = new_SetWindowText;
+	addr_new[1] = new_WSAConnect;
+	addr_new[2] = new_SetWindowText;
 
 	/* save bytes */
 	for (i = 0; i < COUNT; i++) {
@@ -145,67 +150,76 @@ void unhook(int func) {
     DEBUG_LEAVE;
 }
 
-int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
+int WINAPI new_connect(SOCKET s, const struct sockaddr *name, int namelen) {
+    return new_WSAConnect(s, name, namelen, NULL, NULL, NULL, NULL);
+}
+
+int WINAPI new_WSAConnect(SOCKET s,
+			  const struct sockaddr *name,
+			  int namelen,
+			  LPWSABUF lpCallerData,
+			  LPWSABUF lpCalleeData,
+			  LPQOS lpSQOS, LPQOS lpGQOS) {
     int rc, err;
     struct sockaddr_in in_addr;
     struct sockaddr_in out_addr;
     char buf[256];
     fd_set set;
+
     DEBUG_ENTER;
 
-    /* fd_set */
-    FD_ZERO(&set);
-    FD_SET(s, &set);
-
     /* addr */
-    memcpy(&in_addr, addr, sizeof(in_addr));
+    memcpy(&in_addr, name, sizeof(in_addr));
     out_addr.sin_family = AF_INET;
     out_addr.sin_port = htons(1081);
     out_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     /* connect */
-    unhook(1);
-    rc = connect(s, (struct sockaddr *) (&out_addr),
-		 sizeof(struct sockaddr_in));
+    unhook(2);
+    rc = WSAConnect(s, (struct sockaddr *) (&out_addr),
+		    sizeof(struct sockaddr_in), lpCallerData, lpCalleeData,
+		    lpSQOS, lpGQOS);
     err = WSAGetLastError();
 #if defined(_DEBUG) || defined(_DEBUG_)
     TRACE_NO("connect (rc:%i err:%i pid:%i): %s\n", rc, err,
 	     GetCurrentProcessId(), socketError());
 #endif
-    hook(1);
+    hook(2);
     if (rc != 0 && err != WSAEWOULDBLOCK) {
 	closesocket(s);
 	DEBUG_LEAVE;
 	return rc;
     }
 
+    /* fd_set */
+    FD_ZERO(&set);
+    FD_SET(s, &set);
+
     /* sock5 handshake */
     select(s + 1, NULL, &set, NULL, 0);
     rc = send(s, "\x05\x01\x00", 3, 0);
 #if defined(_DEBUG) || defined(_DEBUG_)
-    err = WSAGetLastError();
-    TRACE_NO("send (rc:%i err:%i pid:%i): %s\n", rc, err,
-	     GetCurrentProcessId(), socketError());
+    TRACE_VERBOSE("send (rc:%i err:%i pid:%i): %s\n", rc,
+		  WSAGetLastError(), GetCurrentProcessId(), socketError());
 #endif
     if (rc != 3) {
 	closesocket(s);
 	DEBUG_LEAVE;
-	return -1;
+	return SOCKET_ERROR;
     }
 
     /* socks5 ack */
     select(s + 1, &set, NULL, NULL, 0);
     rc = recv(s, buf, 256, 0);
 #if defined(_DEBUG) || defined(_DEBUG_)
-    err = WSAGetLastError();
-    TRACE_NO("recv (rc:%i err:%i pid:%i): %s\n", rc, err,
-	     GetCurrentProcessId(), socketError());
+    TRACE_VERBOSE("recv (rc:%i err:%i pid:%i): %s\n", rc,
+		  WSAGetLastError(), GetCurrentProcessId(), socketError());
     DUMP(buf, rc);
 #endif
     if (rc != 2) {
 	closesocket(s);
 	DEBUG_LEAVE;
-	return -1;
+	return SOCKET_ERROR;
     }
 
     /* socks5 request */
@@ -215,29 +229,27 @@ int WINAPI new_connect(SOCKET s, const struct sockaddr *addr, int namelen) {
     select(s + 1, NULL, &set, NULL, 0);
     rc = send(s, buf, 10, 0);
 #if defined(_DEBUG) || defined(_DEBUG_)
-    err = WSAGetLastError();
-    TRACE_NO("send (rc:%i err:%i pid:%i): %s\n", rc, err,
-	     GetCurrentProcessId(), socketError());
+    TRACE_VERBOSE("send (rc:%i err:%i pid:%i): %s\n", rc,
+		  WSAGetLastError(), GetCurrentProcessId(), socketError());
 #endif
     if (rc != 10) {
 	closesocket(s);
 	DEBUG_LEAVE;
-	return -1;
+	return SOCKET_ERROR;
     }
 
     /* socks5 ack */
     select(s + 1, &set, NULL, NULL, 0);
     rc = recv(s, buf, 256, 0);
 #if defined(_DEBUG) || defined(_DEBUG_)
-    err = WSAGetLastError();
-    TRACE_NO("recv (rc:%i err:%i pid:%i): %s\n", rc, err,
-	     GetCurrentProcessId(), socketError());
+    TRACE_VERBOSE("recv (rc:%i err:%i pid:%i): %s\n", rc,
+		  WSAGetLastError(), GetCurrentProcessId(), socketError());
     DUMP(buf, rc);
 #endif
     if (rc != 10) {
 	closesocket(s);
 	DEBUG_LEAVE;
-	return -1;
+	return SOCKET_ERROR;
     }
 
     DEBUG_LEAVE;
@@ -256,9 +268,9 @@ BOOL WINAPI new_SetWindowText(HWND h, LPCTSTR text) {
 	strcat(title, TITLE_APPEND);
 
     /* set window text */
-    unhook(2);
+    unhook(3);
     rc = SetWindowText(h, title);
-    hook(2);
+    hook(3);
 
     DEBUG_LEAVE;
 
