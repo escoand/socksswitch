@@ -23,6 +23,7 @@ CCFLAGS   = -O3 -Wall -Isrc/ -Iinclude/
 LDFLAGS   = -Llib/ -lssh
 BUILDDIR  = build
 BINDIR    = bin
+INSTDIR   = $(ProgramFiles)/socksswitch/
 MAIN      = socksswitch
 DRV       = socksswitchdrv
 OBJS      = inject.o main.o match.o sockets.o socks.o ssh.o trace.o
@@ -68,9 +69,15 @@ $(BUILDDIR)/%.o: src/%.c
 $(OBJS): | $(BUILDDIR) $(BINDIR)
 
 $(BUILDDIR):
-	mkdir $@
+	mkdir "$@"
 $(BINDIR):
-	mkdir $@
+	mkdir "$@"
+$(INSTDIR):
+	mkdir "$@"
+
+install: $(MAIN) $(DRV)
+	cp $(MAIN) "$(INSTDIR)"
+	cp $(DRV) "$(INSTDIR)"
 
 upx: $(MAIN) $(DRV)
 	upx $^
