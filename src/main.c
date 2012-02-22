@@ -41,7 +41,7 @@
 #define FD_SET_DATA(set, i) __FDS_BITS(&set)[i]
 #endif
 
-#define SOCKSSWITCH_DRV "C:\\Documents and Settings\\aschoenf\\My Documents\\socksswitch\\bin\\socksswitchdrv.dll"
+#define SOCKSSWITCH_DRV "socksswitchdrv.dll"
 
 fd_set sockets_set, read_set;
 FORWARD_DESTINATION destinations[32];
@@ -58,6 +58,7 @@ int main(int argc, char *argv[]) {
     FORWARD_DESTINATION *dst = NULL;
     char dst_host[256];
     struct timeval to;
+    char *dllpath = NULL;
 
     to.tv_sec = 1;
     to.tv_usec = 0;
@@ -68,6 +69,8 @@ int main(int argc, char *argv[]) {
     /* read params and config */
     readParams(argc, argv);
     masterport = readConfig();
+    dllpath = getcwd(dllpath, MAX_PATH);
+    strcat(dllpath, "\\socksswitchdrv.dll");
 
     DEBUG;
 
@@ -139,7 +142,7 @@ int main(int argc, char *argv[]) {
 	/* try to inject */
 	if (FD_SET_SIZE(read_set) == 0 && channels_out[0] == NULL) {
 	    for (i = 0; i < captures_count; i++)
-		socksswitch_inject(captures[i], SOCKSSWITCH_DRV);
+		socksswitch_inject(captures[i], dllpath);
 	    continue;
 	}
 

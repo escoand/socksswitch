@@ -26,7 +26,7 @@
 #include "sockets.h"
 #include "trace.h"
 
-#define COUNT        3
+#define COUNT        4
 #define SIZE         6
 #define TITLE_APPEND " via socksswitch"
 
@@ -84,7 +84,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,
 	    }
 	}
 
-	hook(0);
+	_hook(0);
 
 	/* window text */
 	h = GetTopWindow(0);
@@ -97,11 +97,17 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,
 	    h = GetNextWindow(h, GW_HWNDNEXT);
 	}
 
+	for (i = 0; i < COUNT; i++) {
+	    TRACE_NO("%i:%X:%X\n", i, addr[i], addr_new[i]);
+	    DUMP(bytes[i], SIZE);
+	    DUMP(jmp[i], SIZE);
+	}
+
 	break;
 
 	/* unhook */
     case DLL_PROCESS_DETACH:
-	unhook(0);
+	_unhook(0);
 	break;
 
     case DLL_THREAD_ATTACH:
@@ -114,7 +120,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,
     return TRUE;
 }
 
-void hook(int func) {
+void _hook(int func) {
     int i;
     DWORD protect;
 
@@ -132,7 +138,7 @@ void hook(int func) {
     DEBUG_LEAVE;
 }
 
-void unhook(int func) {
+void _unhook(int func) {
     int i;
     DWORD protect;
 
@@ -171,11 +177,11 @@ int WINAPI new_WSAConnect(SOCKET s,
     /* addr */
     memcpy(&in_addr, name, sizeof(in_addr));
     out_addr.sin_family = AF_INET;
-    out_addr.sin_port = htons(1081);
+    out_addr.sin_port = htons(1080);
     out_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     /* connect */
-    unhook(2);
+    _unhook(2);
     rc = WSAConnect(s, (struct sockaddr *) (&out_addr),
 		    sizeof(struct sockaddr_in), lpCallerData, lpCalleeData,
 		    lpSQOS, lpGQOS);
@@ -184,7 +190,7 @@ int WINAPI new_WSAConnect(SOCKET s,
     TRACE_NO("connect (rc:%i err:%i pid:%i): %s\n", rc, err,
 	     GetCurrentProcessId(), socketError());
 #endif
-    hook(2);
+    _hook(2);
     if (rc != 0 && err != WSAEWOULDBLOCK) {
 	closesocket(s);
 	DEBUG_LEAVE;
@@ -268,9 +274,9 @@ BOOL WINAPI new_SetWindowText(HWND h, LPCTSTR text) {
 	strcat(title, TITLE_APPEND);
 
     /* set window text */
-    unhook(3);
+    _unhook(3);
     rc = SetWindowText(h, title);
-    hook(3);
+    _hook(3);
 
     DEBUG_LEAVE;
 

@@ -30,7 +30,7 @@ int socksswitch_inject(char *path, const char *dll) {
     char *filename;
     PROCESSENTRY32 pe;
     MODULEENTRY32 me;
-    HANDLE snapshot_proc, snapshow_mod, proc;
+    HANDLE snapshot_proc, snapshot_mod, proc;
     FARPROC load;
     LPVOID addr;
     BOOL inj;
@@ -74,9 +74,9 @@ int socksswitch_inject(char *path, const char *dll) {
 	    continue;
 
 	/* snapshot modules */
-	snapshow_mod = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE,
+	snapshot_mod = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE,
 						pe.th32ProcessID);
-	if (snapshow_mod == INVALID_HANDLE_VALUE) {
+	if (snapshot_mod == INVALID_HANDLE_VALUE) {
 	    TRACE_WARNING
 		("failure on creating toolhelp snapshot(err:%d)\n",
 		 GetLastError());
@@ -87,7 +87,7 @@ int socksswitch_inject(char *path, const char *dll) {
 	DEBUG;
 
 	/* run modules */
-	while (Module32Next(snapshow_mod, &me)) {
+	while (Module32Next(snapshot_mod, &me)) {
 
 	    /* check exe path */
 	    if (strcasecmp(me.szExePath, path) == 0)

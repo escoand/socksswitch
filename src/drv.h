@@ -22,11 +22,14 @@
 #include <windows.h>
 #include <winsock2.h>
 
-void hook();
-void unhook();
+void _hook(int);
+void _unhook(int);
 
 int WINAPI new_connect(SOCKET, const struct sockaddr *, int);
 int WINAPI new_WSAConnect(SOCKET,
 			  const struct sockaddr *,
 			  int, LPWSABUF, LPWSABUF, LPQOS, LPQOS);
 BOOL WINAPI new_SetWindowText(HWND, LPCTSTR);
+
+//_Java_java_net_PlainSocketImpl_socketConnect
+//_Java_java_net_PlainDatagramSocketImpl_connect0
