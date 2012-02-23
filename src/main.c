@@ -49,6 +49,8 @@ FORWARD_PAIR forwards[32];
 char captures[32][256];
 int destinations_count = 0;
 int captures_count = 0;
+char *cfgpath = NULL;
+char *dllpath = NULL;
 
 int main(int argc, char *argv[]) {
     int rc;
@@ -58,21 +60,26 @@ int main(int argc, char *argv[]) {
     FORWARD_DESTINATION *dst = NULL;
     char dst_host[256];
     struct timeval to;
-    char *dllpath = NULL;
 
     to.tv_sec = 1;
     to.tv_usec = 0;
 
     /* default */
-    putenv((char *) "TRACE=2");
+    putenv("TRACE=2");
+    dllpath = getcwd(dllpath, MAX_PATH);
+    strcat(dllpath, "\\socksswitchdrv.dll");
 
     /* read params and config */
     readParams(argc, argv);
     masterport = readConfig();
-    dllpath = getcwd(dllpath, MAX_PATH);
-    strcat(dllpath, "\\socksswitchdrv.dll");
 
     DEBUG;
+
+    /* try to read ddl file */
+    if (access(dllpath, 04) != 0) {
+	TRACE_ERROR("unable to read dll file \"%s\"\n", dllpath);
+	dllpath = NULL;
+    }
 
     /* init socket handling */
     socksswitch_init();
@@ -140,7 +147,8 @@ int main(int argc, char *argv[]) {
 	DEBUG;
 
 	/* try to inject */
-	if (FD_SET_SIZE(read_set) == 0 && channels_out[0] == NULL) {
+	if (dllpath != NULL && FD_SET_SIZE(read_set) == 0
+	    && channels_out[0] == NULL) {
 	    for (i = 0; i < captures_count; i++)
 		socksswitch_inject(captures[i], dllpath);
 	    continue;
@@ -303,9 +311,10 @@ void showHelp(char *binary) {
     printf
 	("  -c <file>  Read config from <file> instead socksswitch.cfg.\n");
     printf("  -d         Dump datagram data (huge output).\n");
+    printf("  -D <file>  Inject DLL <file> instead socksswitchdrv.dll.\n");
     printf("  -h         Display this help message.\n");
     printf("  -l <file>  Log to <file> instead STDOUT/STDERR.\n");
-    printf("  -qq        Decrease verbosity to QUIET.\n");
+    printf("  -qq        Decrease verbosity to QUIET (no output).\n");
     printf("  -q         Decrease verbosity to ERROR.\n");
     printf("  -v         Increase verbosity to INFO.\n");
     printf("  -vv        Increase verbosity to VERBOSE.\n");
@@ -330,29 +339,41 @@ void readParams(const int argc, char *argv[]) {
 
 	/* config file */
 	else if (strcmp(argv[i], "-c") == 0) {
-	    sprintf(tmp, "CFGFILE=%s", argv[++i]);
-	    putenv(tmp);
+	    i++;
+	    strcpy(cfgpath, argv[i]);
 	}
 
 	/* log file */
 	else if (strcmp(argv[i], "-l") == 0) {
-	    sprintf(tmp, "LOGFILE=%s", argv[++i]);
+	    i++;
+	    sprintf(tmp, "LOGFILE=%s", argv[i]);
 	    putenv(tmp);
+	}
+
+	/* dll file */
+	else if (strcmp(argv[i], "-D") == 0) {
+	    i++;
+	    if (strchr(argv[i], ':') == NULL) {
+		dllpath = getcwd(dllpath, MAX_PATH);
+		strcat(dllpath, "\\");
+		strcat(dllpath, argv[i]);
+	    } else
+		strcpy(dllpath, argv[i]);
 	}
 
 	/* tacelevel */
 	else if (strcmp(argv[i], "-qq") == 0)
-	    putenv((char *) "TRACE=0");
+	    putenv("TRACE=0");
 	else if (strcmp(argv[i], "-q") == 0)
-	    putenv((char *) "TRACE=1");
+	    putenv("TRACE=1");
 	else if (strcmp(argv[i], "-v") == 0)
-	    putenv((char *) "TRACE=3");
+	    putenv("TRACE=3");
 	else if (strcmp(argv[i], "-vv") == 0)
-	    putenv((char *) "TRACE=4");
+	    putenv("TRACE=4");
 
 	/* dump */
 	else if (strcmp(argv[i], "-d") == 0)
-	    putenv((char *) "DUMP=1");
+	    putenv("DUMP=1");
 
 	/* unsupported argument */
 	else {
@@ -364,7 +385,6 @@ void readParams(const int argc, char *argv[]) {
 
 /* read config file */
 int readConfig() {
-    char *filename = "socksswitch.cfg";
     FILE *cfgfile = NULL;
     char cfgline[1024];
     char cfgtype[256];
@@ -372,16 +392,13 @@ int readConfig() {
 
     DEBUG_ENTER;
 
-    /* get config file */
-    if (getenv("CFGFILE") != NULL)
-	filename = getenv("CFGFILE");
-
-    TRACE_INFO("read config (file:%s)\n", filename);
+    if (cfgpath == NULL)
+	cfgpath = "socksswitch.cfg";
 
     /* open config file */
-    cfgfile = fopen(filename, "r");
+    cfgfile = fopen(cfgpath, "r");
     if (!cfgfile) {
-	TRACE_ERROR("unable to open config file %s.\n", filename);
+	TRACE_ERROR("unable to open config file \"%s\".\n", cfgpath);
 	exit(1);
     }
 

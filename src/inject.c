@@ -37,13 +37,6 @@ int socksswitch_inject(char *path, const char *dll) {
 
     DEBUG_ENTER;
 
-    /* try to read file */
-    if (access(dll, 04) != 0) {
-	TRACE_WARNING("unable to read %s\n", dll);
-	DEBUG_LEAVE;
-	return 0;
-    }
-    //path = realpath(path, NULL);
     filename = strrchr(path, '\\') + 1;
 
     DEBUG;
