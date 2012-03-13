@@ -46,7 +46,7 @@ DRV      := $(addprefix $(BINDIR)/,$(DRV))
 all: $(MAIN) $(DRV)
 drv: $(DRV)
 
-debug: CCFLAGS += -g -D_DEBUG -D_DEBUG_
+debug: CCFLAGS += -g3 -D_DEBUG -D_DEBUG_
 debug: all
 
 static: CCFLAGS += -DLIBSSH_STATIC

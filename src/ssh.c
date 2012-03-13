@@ -29,55 +29,13 @@
 #include "ssh.h"
 #include "trace.h"
 
-/* wrapper for socket connecting */
-int socksswitch_ssh_connect(ssh_session * session, const char *host,
-			    const SOCKET_DATA_LEN port,
-			    ssh_channel * channel) {
-    DEBUG_ENTER;
-
-    if (!ssh_is_connected(*session))
-	return 0;
-
-    TRACE_VERBOSE("connecting to %s:%i (session:%i channel:%i)\n",
-		  host, port, *session, *channel);
-
-    /* create channel */
-    *channel = ssh_channel_new(*session);
-    if (channel == NULL) {
-	TRACE_WARNING
-	    ("failure on creating channel (session:%i err:%i): %s\n",
-	     *session, ssh_get_error_code(*session),
-	     ssh_get_error(*session));
-	DEBUG_LEAVE;
-	return 0;
-    }
-
-    /* connect */
-    if (ssh_channel_open_forward(*channel, host, port, "", 0) != SSH_OK) {
-	TRACE_WARNING
-	    ("failure on connect to %s:%i (session:%i err:%i): %s\n",
-	     host, port, *session, ssh_get_error_code(*session),
-	     ssh_get_error(*session));
-	if (channel != NULL)
-	    ssh_channel_free(*channel);
-	DEBUG_LEAVE;
-	return 0;
-    }
-
-    TRACE_INFO("connected to %s:%i (session:%i channel:%i)\n", host,
-	       port, *session, *channel);
-
-    DEBUG_LEAVE;
-    return 1;
-}
-
 /* wrapper for socket receiving */
 SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel * channel, char *buf) {
     int rc;
 
     DEBUG_ENTER;
 
-    rc = ssh_channel_read_nonblocking(*channel, buf, SOCKET_DATA_MAX, 0);
+    rc = ssh_channel_read(*channel, buf, SOCKET_DATA_MAX, 0);
 
     DEBUG;
 
@@ -176,6 +134,122 @@ int socksswitch_ssh_close(ssh_channel * channel) {
 
     DEBUG_LEAVE;
     return rc;
+}
+
+int socksswitch_ssh_thread(void *params) {
+    int rc;
+    fd_set sockets_set, read_set;
+    ssh_channel channel[2], read_channel[2];
+    SSH_THREAD_DATA data;
+    char buf[SOCKET_DATA_MAX];
+
+    DEBUG_ENTER;
+
+    memcpy(&data, params, sizeof(SSH_THREAD_DATA));
+
+    TRACE_VERBOSE("connecting to %s:%i (session:%i)\n",
+		  data.host, data.port, data.session);
+
+    if (!ssh_is_connected(data.session)) {
+	TRACE_WARNING("session not connected (session:%i)\n",
+		      data.session);
+	DEBUG_LEAVE;
+	return 0;
+    }
+
+    DEBUG;
+
+    /* init */
+    FD_ZERO(&sockets_set);
+    FD_SET(data.sock, &sockets_set);
+    channel[0] = NULL;
+    channel[1] = NULL;
+
+    DEBUG;
+
+    /* create channel */
+    channel[0] = ssh_channel_new(data.session);
+    if (channel[0] == NULL) {
+	TRACE_WARNING
+	    ("failure on creating channel (session:%i err:%i): %s\n",
+	     data.session, ssh_get_error_code(data.session),
+	     ssh_get_error(data.session));
+	DEBUG_LEAVE;
+	return 0;
+    }
+
+    DEBUG;
+
+    /* connect */
+    if (ssh_channel_open_forward
+	(channel[0], data.host, data.port, "", 0) != SSH_OK) {
+	TRACE_WARNING
+	    ("failure on connect to %s:%i (session:%i err:%i): %s\n",
+	     data.host, data.port, data.session,
+	     ssh_get_error_code(data.session),
+	     ssh_get_error(data.session));
+	if (channel != NULL)
+	    ssh_channel_free(channel[0]);
+	DEBUG_LEAVE;
+	return 0;
+    }
+
+    DEBUG;
+
+    TRACE_INFO("connected to %s:%i (session:%i channel:%i)\n", data.host,
+	       data.port, data.session, channel[0]);
+
+    for (;;) {
+	memset(buf, 0, SOCKET_DATA_MAX);
+
+	DEBUG;
+
+	/* listening */
+	read_set = sockets_set;
+	rc = ssh_select(channel, read_channel, data.sock + 1, &read_set,
+			NULL);
+	TRACE_NO("rc:%i chan:%p set:%i %i\n", rc, read_channel[0],
+		 FD_SET_SIZE(read_set), SSH_ERROR);
+
+	DEBUG;
+
+	/* error */
+	if (rc == SSH_ERROR) {
+	    socksswitch_ssh_close(&channel[0]);
+	    //ssh_channel_free(channel[0]);
+	    socksswitch_close(data.sock);
+	    return 0;
+	}
+
+	/* channel action */
+	if (read_channel[0] != NULL) {
+	    rc = socksswitch_ssh_recv(&channel[0], buf);
+	    if (rc <= 0) {
+		socksswitch_ssh_close(&channel[0]);
+		//ssh_channel_free(channel[0]);
+		socksswitch_close(data.sock);
+		return 0;
+	    } else if (rc > 0)
+		socksswitch_send(data.sock, buf, rc);
+	}
+
+	DEBUG;
+
+	/* socket action */
+	if (FD_ISSET(data.sock, &read_set)) {
+	    rc = socksswitch_recv(data.sock, buf);
+	    if (rc <= 0) {
+		socksswitch_ssh_close(&channel[0]);
+		//ssh_channel_free(channel[0]);
+		socksswitch_close(data.sock);
+		return 0;
+	    } else if (rc > 0)
+		socksswitch_ssh_send(&channel[0], buf, rc);
+	}
+    }
+
+    DEBUG_LEAVE;
+    return 1;
 }
 
 /* create and connect ssh socket */

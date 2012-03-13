@@ -56,8 +56,8 @@ int main(int argc, char *argv[]) {
     int rc;
     unsigned int i, j, masterport, socket_max, newsock;
     char buf[SOCKET_DATA_MAX], tmp[SOCKET_DATA_MAX];
-    ssh_channel channel, channels_in[32], channels_out[32];
     FORWARD_DESTINATION *dst = NULL;
+    SSH_THREAD_DATA thread_data;
     char dst_host[256];
     struct timeval to;
 
@@ -133,22 +133,17 @@ int main(int argc, char *argv[]) {
 
 	DEBUG;
 
-	/* channels list */
-	for (i = j = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++)
-	    if (forwards[i].channel != NULL)
-		channels_in[j++] = forwards[i].channel;
-	channels_in[j] = NULL;
-
 	/* wait for socket actions */
 	read_set = sockets_set;
-	rc = ssh_select(channels_in, channels_out, socket_max + 1,
-			&read_set, &to);
+	if (dllpath != NULL)
+	    rc = select(socket_max + 1, &read_set, NULL, NULL, &to);
+	else
+	    rc = select(socket_max + 1, &read_set, NULL, NULL, NULL);
 
 	DEBUG;
 
 	/* try to inject */
-	if (dllpath != NULL && FD_SET_SIZE(read_set) == 0
-	    && channels_out[0] == NULL) {
+	if (dllpath != NULL && FD_SET_SIZE(read_set) == 0) {
 	    for (i = 0; i < captures_count; i++)
 		socksswitch_inject(captures[i], dllpath);
 	    continue;
@@ -175,22 +170,6 @@ int main(int argc, char *argv[]) {
 
 	DEBUG;
 
-	/* ssh channel action */
-	for (i = 0; channels_out[i] != NULL; i++) {
-	    memset(buf, 0, SOCKET_DATA_MAX);
-	    rc = socksswitch_ssh_recv(&channels_out[i], buf);
-
-	    /* forward */
-	    if (rc > 0)
-		forward(0, &channels_out[i], buf, rc);
-
-	    /* error */
-	    else if (rc < 0)
-		socksswitch_ssh_close(&channels_out[i]);
-	}
-
-	DEBUG;
-
 	/* client socket action */
 	for (i = 0; i < FD_SET_SIZE(read_set); i++) {
 
@@ -213,7 +192,9 @@ int main(int argc, char *argv[]) {
 	    }
 
 	    /* socks5 handshake */
-	    else if (rc == 3 && memcmp(buf, "\x05\x01\x00", 3) == 0) {
+	    else if ((rc == 3 && memcmp(buf, "\x05\x01\x00", 3) == 0)
+		     || (rc == 4
+			 && memcmp(buf, "\x05\x02\x00\x02", 4) == 0)) {
 		DEBUG;
 		rc = socksswitch_send(FD_SET_DATA(read_set, i),
 				      "\x05\x00", 2);
@@ -237,25 +218,25 @@ int main(int argc, char *argv[]) {
 		    memset(dst_host, 0, sizeof(dst_host));
 		    getSocksReqHost(dst_host, buf, rc);
 
+		    /* commit */
+		    buf[1] = 0x00;
+		    socksswitch_send(FD_SET_DATA(read_set, i), buf, rc);
+		    FD_CLR(FD_SET_DATA(read_set, i), &sockets_set);
+
 		    /* connected */
-		    if (socksswitch_ssh_connect(&dst->session,
-						dst_host,
-						getSocksReqPort
-						(buf, rc), &channel)) {
+		    thread_data.sock = FD_SET_DATA(read_set, i);
+		    thread_data.session = dst->session;
+		    strcpy(thread_data.host, dst_host);
+		    thread_data.port = getSocksReqPort(buf, rc);
+		    DEBUG;
+		    strcpy(thread_data.user, dst->user);
+		    DEBUG;
+		    strcpy(thread_data.keyfile, dst->privkeyfile);
+		    DEBUG;
+		    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)
+				 socksswitch_ssh_thread, &thread_data, 0,
+				 NULL);
 
-			/* add new socket */
-			forwardsAdd(FORWARD_TYPE_SSH,
-				    FD_SET_DATA(read_set, i), 0, &channel);
-
-			/* init connection */
-			buf[1] = 0x00;
-			socksswitch_send(FD_SET_DATA(read_set, i), buf,
-					 rc);
-		    }
-
-		    /* error */
-		    else
-			cleanEnd(FD_SET_DATA(read_set, i));
 		    DEBUG;
 		}
 

@@ -24,6 +24,12 @@
 
 typedef struct {
     unsigned char ver;
+    unsigned char nmethods;
+    unsigned char methods[];
+} SOCKS5_HANDSHAKE;
+
+typedef struct {
+    unsigned char ver;
     unsigned char cmd;
     union {
 	struct {

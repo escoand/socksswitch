@@ -22,11 +22,27 @@
 #ifndef SSH_H
 #define SSH_H
 
+#if defined WIN32 && !defined MINGW32
+#define FD_SET_SIZE(set) (set).fd_count
+#define FD_SET_DATA(set, i) (set).fd_array[i]
+#else
+#define FD_SET_SIZE(set) FD_SETSIZE
+#define FD_SET_DATA(set, i) __FDS_BITS(&set)[i]
+#endif
+
 #include <libssh/libssh.h>
 #include "sockets.h"
 
-int socksswitch_ssh_connect(ssh_session *, const char *,
-			    const SOCKET_DATA_LEN, ssh_channel *);
+typedef struct {
+    SOCKET_DATA_LEN sock;
+    ssh_session session;
+    char host[256];
+    SOCKET_DATA_LEN port;
+    char user[128];
+    char keyfile[1024];
+} SSH_THREAD_DATA;
+
+int socksswitch_ssh_thread(void *params);
 SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel *, char *);
 int socksswitch_ssh_send(ssh_channel *, const char *,
 			 const SOCKET_DATA_LEN);

@@ -36,8 +36,7 @@ trace(const char *file, const int line, const char *function,
       enum TRACE_LEVEL level, const char *format, ...) {
     const char *tl[] = { "", "ERROR", "WARNING", "INFO", "VERBOSE" };
     FILE *output;
-    char datestr[9];
-    char timestr[9];
+    char datestr[9], timestr[9], msg1[256], msg2[1025];
     va_list ap;
 
     /*  check if log needed */
@@ -55,6 +54,16 @@ trace(const char *file, const int line, const char *function,
     strftime(timestr, 9, "%X", localtime(&rawtime));
 #endif
 
+    /*  output message */
+    sprintf(msg1, "[%s %s] ", datestr, timestr);
+    if (file && line && function)
+	sprintf(msg1, "%s%s:%d:%s: ", msg1, file, line, function);
+    if (level != TRACE_LEVEL_NO)
+	sprintf(msg1, "%s%s: ", msg1, tl[level]);
+    va_start(ap, format);
+    vsprintf(msg2, format, ap);
+    va_end(ap);
+
     /*  log to file */
     if (getenv("LOGFILE") != NULL)
 	output = fopen(getenv("LOGFILE"), "a");
@@ -66,16 +75,7 @@ trace(const char *file, const int line, const char *function,
 	else
 	    output = stdout;
     }
-
-    /*  output message */
-    fprintf(output, "[%s %s] ", datestr, timestr);
-    if (file && line && function)
-	fprintf(output, "%s:%d:%s: ", file, line, function);
-    if (level != TRACE_LEVEL_NO)
-	fprintf(output, "%s: ", tl[level]);
-    va_start(ap, format);
-    vfprintf(output, format, ap);
-    va_end(ap);
+    fputs(strcat(msg1, msg2), output);
 
     /*  close log file */
     if (getenv("LOGFILE") != NULL)
@@ -114,11 +114,44 @@ void trace_append(enum TRACE_LEVEL level, const char *format, ...) {
 
 void trace_dump(const void *data, int len) {
     int i, j;
+    char msg1[1024 * 10 * 4] = "", msg2[16];
     FILE *output;
 
     /*  check if log needed */
     if (getenv("DUMP") == NULL)
 	return;
+
+    /*  output hexdump */
+    for (i = 0; i < len; i = i + 16) {
+
+	/* pos */
+	sprintf(msg2, "%08x  ", i);
+	strcpy(msg1 + strlen(msg1), msg2);
+
+	/* hex */
+	for (j = i; j < i + 16 && j < len; j++) {
+	    sprintf(msg2, "%02x ", ((unsigned char *) data)[j]);
+	    strcpy(msg1 + strlen(msg1), msg2);
+	}
+
+	/* spacer */
+	for (; j < i + 16; j++)
+	    strcpy(msg1 + strlen(msg1), "   ");
+	strcpy(msg1 + strlen(msg1), " ");
+
+	/* ascii */
+	for (j = i; j < i + 16 && j < len; j++) {
+	    if (((unsigned char *) data)[j] < 0x20
+		|| ((unsigned char *) data)[j] > 0x7e)
+		strcpy(msg1 + strlen(msg1), ".");
+	    else {
+		sprintf(msg2, "%c", ((unsigned char *) data)[j]);
+		strcpy(msg1 + strlen(msg1), msg2);
+	    }
+	}
+
+	strcpy(msg1 + strlen(msg1), "\n");
+    }
 
     /*  log to file */
     if (getenv("LOGFILE") != NULL)
@@ -126,32 +159,7 @@ void trace_dump(const void *data, int len) {
     else
 	output = stdout;
 
-    /*  output hexdump */
-    for (i = 0; i < len; i = i + 16) {
-
-	/* pos */
-	fprintf(output, "%08x  ", i);
-
-	/* hex */
-	for (j = i; j < i + 16 && j < len; j++)
-	    fprintf(output, "%02x ", ((unsigned char *) data)[j]);
-
-	/* spacer */
-	for (; j < i + 16; j++)
-	    fprintf(output, "   ");
-	fprintf(output, " ");
-
-	/* ascii */
-	for (j = i; j < i + 16 && j < len; j++) {
-	    if (((unsigned char *) data)[j] < 0x20
-		|| ((unsigned char *) data)[j] > 0x7e)
-		fprintf(output, ".");
-	    else
-		fprintf(output, "%c", ((unsigned char *) data)[j]);
-	}
-
-	fprintf(output, "\n");
-    }
+    fputs(msg1, output);
 
     /*  close log file */
     if (getenv("LOGFILE") != NULL)

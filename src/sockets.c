@@ -149,14 +149,38 @@ int
 socksswitch_send(const int sock,
 		 const char *buf, const SOCKET_DATA_LEN len) {
     int rc = 0, bytessend = 0;
+    fd_set write_set;
+    struct timeval to;
 
     DEBUG_ENTER;
 
     if (sock <= 0)
 	return SOCKET_ERROR;
 
+    /* waiting */
+    FD_ZERO(&write_set);
+    FD_SET(sock, &write_set);
+    to.tv_sec = 0;
+    to.tv_usec = 100;
+
     /* send data */
     while (bytessend < len) {
+
+	/* check if ready */
+	/*TRACE_VERBOSE("wait for ready for sending (sock:%i)\n", sock);
+	rc = select(sock + 1, NULL, &write_set, NULL, NULL);
+	if (rc == 0) {
+	    TRACE_WARNING("socket not ready for writing (sock:%i)\n",
+			  sock);
+	    return -1;
+	}
+	else if(rc < 0) {
+	    TRACE_WARNING
+		("failure on waiting for writing (sock:%i err:%i): %s\n",
+		 sock, SOCKET_ERROR_CODE, socketError());
+	    return -1;
+	}*/
+
 	rc = send(sock, buf + bytessend, len - bytessend, 0);
 
 	/* error */
