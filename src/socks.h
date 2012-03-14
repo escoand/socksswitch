@@ -55,5 +55,6 @@ typedef struct {
 
 void getSocksReqHost(char *host, const char *buf, const int len);
 unsigned short getSocksReqPort(const char *buf, const int len);
+int getSocksReqLen(const SOCKS_REQUEST *req);
 
 #endif				/* SOCKS_H */

@@ -110,7 +110,7 @@ unsigned short getSocksReqPort(const char *buf, const int len) {
     }
 
     /* socks5 domain */
-    else if (req->ver == 5) {
+    else if (req->ver == 5 && req->data.socks5.atyp != 4) {
 	memcpy(&port,
 	       &req->data.socks5.data.str + req->data.socks5.data.str.len +
 	       1, 2);
@@ -129,4 +129,25 @@ unsigned short getSocksReqPort(const char *buf, const int len) {
 
     DEBUG_LEAVE;
     return port;
+}
+
+/* return the length of th socks request */
+int getSocksReqLen(const SOCKS_REQUEST * req) {
+    /* socks4 */
+    if (req->ver == 4)
+	return 9;
+
+    /* socks5 ipv4 */
+    else if (req->ver == 5 && req->data.socks5.atyp == 1)
+	return 10;
+
+    /* socks5 domain */
+    else if (req->ver == 5 && req->data.socks5.atyp == 3)
+	return 7 + req->data.socks5.data.str.len;
+
+    /* socks5 ipv6 */
+    else if (req->ver == 5 && req->data.socks5.atyp == 4)
+	return 22;
+
+    return 0;
 }
