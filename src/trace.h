@@ -32,12 +32,12 @@
 #define DUMP(...)          trace_dump(__VA_ARGS__)
 
 #if defined(_DEBUG) || defined(_DEBUG_)
-#define TRACE(...)         trace(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+#define TRACE(...)         trace(strchr(__FILE__,'/')+1, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define DEBUG              TRACE(TRACE_LEVEL_NO, "DEBUG:\n");
 #define DEBUG_ENTER        TRACE(TRACE_LEVEL_NO, "DEBUG: enter function\n");
 #define DEBUG_LEAVE        TRACE(TRACE_LEVEL_NO, "DEBUG: leave function\n");
 #else
-#define TRACE(...)         trace(NULL, 0, NULL, __VA_ARGS__)
+#define TRACE(...)         trace(strchr(__FILE__,'/')+1, __LINE__, NULL, __VA_ARGS__)
 #define DEBUG
 #define DEBUG_ENTER
 #define DEBUG_LEAVE

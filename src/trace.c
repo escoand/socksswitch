@@ -54,12 +54,36 @@ trace(const char *file, const int line, const char *function,
     strftime(timestr, 9, "%X", localtime(&rawtime));
 #endif
 
-    /*  output message */
-    sprintf(msg1, "[%s %s] ", datestr, timestr);
-    if (file && line && function)
-	sprintf(msg1, "%s%s:%d:%s: ", msg1, file, line, function);
-    if (level != TRACE_LEVEL_NO)
-	sprintf(msg1, "%s%s: ", msg1, tl[level]);
+    /* date and thread id */
+    sprintf(msg1, "%s %s [%li] ", datestr, timestr,
+	    (unsigned long) GetCurrentThreadId());
+
+    /* fine, line, function  */
+    if (file || line || function)
+	strcpy(msg1 + strlen(msg1), "(");
+    if (file)
+	strcpy(msg1 + strlen(msg1), file);
+    if (line) {
+	if (file)
+	    strcpy(msg1 + strlen(msg1), " ");
+	sprintf(msg2, "%li", (unsigned long) line);
+	strcpy(msg1 + strlen(msg1), msg2);
+    }
+    if (function) {
+	if (file || line)
+	    strcpy(msg1 + strlen(msg1), " ");
+	strcpy(msg1 + strlen(msg1), function);
+    }
+    if (file || line || function)
+	strcpy(msg1 + strlen(msg1), ") ");
+
+    /* trace level */
+    if (level != TRACE_LEVEL_NO) {
+	strcpy(msg1 + strlen(msg1), tl[level]);
+	strcpy(msg1 + strlen(msg1), ": ");
+    }
+
+    /* message */
     va_start(ap, format);
     vsprintf(msg2, format, ap);
     va_end(ap);
