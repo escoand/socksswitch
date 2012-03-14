@@ -32,12 +32,14 @@
 
 #include <libssh/libssh.h>
 #include "sockets.h"
+#include "socks.h"
 
 typedef struct {
+    SOCKS_REQUEST *request;
     SOCKET_DATA_LEN sock;
     ssh_session session;
     char host[256];
-    SOCKET_DATA_LEN port;
+    unsigned short port;
     char user[128];
     char keyfile[1024];
 } SSH_THREAD_DATA;

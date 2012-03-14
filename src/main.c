@@ -219,11 +219,11 @@ int main(int argc, char *argv[]) {
 		    getSocksReqHost(dst_host, buf, rc);
 
 		    /* commit */
-		    buf[1] = 0x00;
-		    socksswitch_send(FD_SET_DATA(read_set, i), buf, rc);
 		    FD_CLR(FD_SET_DATA(read_set, i), &sockets_set);
 
 		    /* connected */
+		    //memcpy(thread_data.request, buf, rc);
+		    thread_data.request = (SOCKS_REQUEST*) buf;
 		    thread_data.sock = FD_SET_DATA(read_set, i);
 		    thread_data.session = dst->session;
 		    strcpy(thread_data.host, dst_host);

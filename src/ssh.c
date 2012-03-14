@@ -141,11 +141,14 @@ int socksswitch_ssh_thread(void *params) {
     fd_set sockets_set, read_set;
     ssh_channel channel[2], read_channel[2];
     SSH_THREAD_DATA data;
+    SOCKS_REQUEST req;
     char buf[SOCKET_DATA_MAX];
 
     DEBUG_ENTER;
+    TRACE_VERBOSE("start thread\n");
 
-    memcpy(&data, params, sizeof(SSH_THREAD_DATA));
+    memcpy(&data, params, sizeof(data));
+    memcpy(&req, data.request, sizeof(req));
 
     TRACE_VERBOSE("connecting to %s:%i (session:%i)\n",
 		  data.host, data.port, data.session);
@@ -174,9 +177,20 @@ int socksswitch_ssh_thread(void *params) {
 	    ("failure on creating channel (session:%i err:%i): %s\n",
 	     data.session, ssh_get_error_code(data.session),
 	     ssh_get_error(data.session));
+
+	/* send feedback */
+	req.cmd = 0x01;
+	socksswitch_send(data.sock, (char *) &req, getSocksReqLen(&req));
+
+	/* exit */
+	socksswitch_close(data.sock);
 	DEBUG_LEAVE;
 	return 0;
     }
+
+    /* send feedback */
+    req.cmd = 0x00;
+    socksswitch_send(data.sock, (char *) &req, getSocksReqLen(&req));
 
     DEBUG;
 
@@ -208,8 +222,6 @@ int socksswitch_ssh_thread(void *params) {
 	read_set = sockets_set;
 	rc = ssh_select(channel, read_channel, data.sock + 1, &read_set,
 			NULL);
-	TRACE_NO("rc:%i chan:%p set:%i %i\n", rc, read_channel[0],
-		 FD_SET_SIZE(read_set), SSH_ERROR);
 
 	DEBUG;
 
@@ -218,6 +230,8 @@ int socksswitch_ssh_thread(void *params) {
 	    socksswitch_ssh_close(&channel[0]);
 	    //ssh_channel_free(channel[0]);
 	    socksswitch_close(data.sock);
+	    TRACE_VERBOSE("close thread\n");
+	    DEBUG_LEAVE;
 	    return 0;
 	}
 
@@ -228,6 +242,8 @@ int socksswitch_ssh_thread(void *params) {
 		socksswitch_ssh_close(&channel[0]);
 		//ssh_channel_free(channel[0]);
 		socksswitch_close(data.sock);
+		TRACE_VERBOSE("close thread\n");
+		DEBUG_LEAVE;
 		return 0;
 	    } else if (rc > 0)
 		socksswitch_send(data.sock, buf, rc);
@@ -242,12 +258,15 @@ int socksswitch_ssh_thread(void *params) {
 		socksswitch_ssh_close(&channel[0]);
 		//ssh_channel_free(channel[0]);
 		socksswitch_close(data.sock);
+		TRACE_VERBOSE("close thread\n");
+		DEBUG_LEAVE;
 		return 0;
 	    } else if (rc > 0)
 		socksswitch_ssh_send(&channel[0], buf, rc);
 	}
     }
 
+    TRACE_VERBOSE("close thread\n");
     DEBUG_LEAVE;
     return 1;
 }
