@@ -90,7 +90,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,
 	h = GetTopWindow(0);
 	while (h) {
 	    GetWindowThreadProcessId(h, (PDWORD) & pid);
-	    if (pid == GetCurrentProcessId()) {
+	    if (pid == GetCurrentProcessId() && IsWindow(h)
+		&& IsWindowVisible(h)) {
 		GetWindowText(h, txt, sizeof(txt));
 		SetWindowText(h, txt);
 	    }
@@ -98,7 +99,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,
 	}
 
 	for (i = 0; i < COUNT; i++) {
-	    TRACE_NO("%i:%X:%X\n", i, addr[i], addr_new[i]);
 	    DUMP(bytes[i], SIZE);
 	    DUMP(jmp[i], SIZE);
 	}
