@@ -477,7 +477,14 @@ int matchFilter(FORWARD_DESTINATION ** fo, const char *buf, const int len) {
     getSocksReqHost(host, buf, len);
     for (i = 0; i < destinations_count; i++)
 	for (j = 0; j < destinations[i].filters_count; j++)
-	    if (matching(host, destinations[i].filters[j])) {
+	    if (*destinations[i].filters[j] == '!' &&
+		matching(host, destinations[i].filters[j])) {
+		("request %s:%i matches neg filter %s for %s:%i\n",
+		 host, getSocksReqPort(buf, len),
+		 destinations[i].filters[j],
+		 destinations[i].host, destinations[i].port);
+		return 0;
+	    } else if (matching(host, destinations[i].filters[j])) {
 		TRACE_INFO
 		    ("request %s:%i matches filter %s for %s:%i\n",
 		     host, getSocksReqPort(buf, len),
