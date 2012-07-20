@@ -26,7 +26,7 @@
 #include "sockets.h"
 #include "trace.h"
 
-#define COUNT        4
+#define COUNT        3
 #define SIZE         6
 #define TITLE_APPEND " via socksswitch"
 
@@ -71,6 +71,13 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,
 	addr_new[0] = new_connect;
 	addr_new[1] = new_WSAConnect;
 	addr_new[2] = new_SetWindowText;
+
+#if defined(_DEBUG) || defined(_DEBUG_)
+	for (i = 0; i < COUNT; i++) {
+	    TRACE_VERBOSE("pid:%i org:%p new:%p\n", GetCurrentProcessId(),
+			  addr[i], addr_new[i]);
+	}
+#endif
 
 	/* save bytes */
 	for (i = 0; i < COUNT; i++) {
@@ -174,17 +181,23 @@ int WINAPI new_WSAConnect(SOCKET s,
 
     DEBUG_ENTER;
 
-    /* addr */
     memcpy(&in_addr, name, sizeof(in_addr));
-    out_addr.sin_family = AF_INET;
-    out_addr.sin_port = htons(1080);
-    out_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    /* change non-local */
+    if (in_addr.sin_addr.s_addr != inet_addr("127.0.0.1")) {
+	DEBUG;
+	out_addr.sin_family = AF_INET;
+	out_addr.sin_port = htons(1080);
+	out_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    }
+
+    DEBUG;
 
     /* connect */
     _unhook(2);
     rc = WSAConnect(s, (struct sockaddr *) (&out_addr),
-		    sizeof(struct sockaddr_in), lpCallerData, lpCalleeData,
-		    lpSQOS, lpGQOS);
+		    sizeof(struct sockaddr_in), lpCallerData,
+		    lpCalleeData, lpSQOS, lpGQOS);
     err = WSAGetLastError();
 #if defined(_DEBUG) || defined(_DEBUG_)
     TRACE_NO("connect (rc:%i err:%i pid:%i): %s\n", rc, err,
@@ -197,10 +210,15 @@ int WINAPI new_WSAConnect(SOCKET s,
 	return rc;
     }
 
+    /* pass through local */
+    if (in_addr.sin_addr.s_addr == inet_addr("127.0.0.1")) {
+	DEBUG_LEAVE;
+	return rc;
+    }
+
     /* fd_set */
     FD_ZERO(&set);
     FD_SET(s, &set);
-
     /* sock5 handshake */
     select(s + 1, NULL, &set, NULL, 0);
     rc = send(s, "\x05\x01\x00", 3, 0);
@@ -264,21 +282,20 @@ int WINAPI new_WSAConnect(SOCKET s,
 
 BOOL WINAPI new_SetWindowText(HWND h, LPCTSTR text) {
     BOOL rc;
-    char title[1024];
-
     DEBUG_ENTER;
-
-    /* get title */
-    strcpy(title, text);
-    if (IsWindow(h) && strstr(text, TITLE_APPEND) == NULL)
-	strcat(title, TITLE_APPEND);
-
+#if defined(_DEBUG) || defined(_DEBUG_)
+    TRACE_VERBOSE("org title: %s\n", text);
+#endif
+    /* update title */
+    if (strstr((char *) text, TITLE_APPEND) == NULL)
+	text = strcat((char *) text, TITLE_APPEND);
+#if defined(_DEBUG) || defined(_DEBUG_)
+    TRACE_VERBOSE("new title: %s\n", text);
+#endif
     /* set window text */
     _unhook(3);
-    rc = SetWindowText(h, title);
+    rc = SetWindowText(h, text);
     _hook(3);
-
     DEBUG_LEAVE;
-
     return rc;
 }

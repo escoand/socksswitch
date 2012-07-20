@@ -25,7 +25,7 @@ int matching(char *text, char *pattern) {
     char *orig_pattern = pattern;
 
     /* matching beginning */
-    if (*pattern == '^')
+    if (*pattern == '^' || *pattern == '!')
 	pattern++;
 
     /* run through text */
