@@ -23,12 +23,14 @@
 #define SOCKETS_H
 
 #ifdef WIN32
+#define SOCKET_SOCKET     SOCKET
 #define SOCKET_ADDR_LEN   int
 #define SOCKET_DATA_LEN   int
 #define SOCKET_CLOSE      closesocket
 #define SOCKET_ERROR_CODE WSAGetLastError()
 #else
 #define SD_BOTH           2
+#define SOCKET_SOCKET     int
 #define SOCKET_ADDR_LEN   socklen_t
 #define SOCKET_DATA_LEN   size_t
 #define SOCKET_CLOSE      close
@@ -44,16 +46,17 @@ typedef enum {
     SOCKET_TYPE_SSH
 } SOCKET_TYPE;
 
-void socksswitch_init();
-const char *socksswitch_addr(const int);
-int socksswitch_accept(const int);
-SOCKET_DATA_LEN socksswitch_recv(const int, char *);
-int socksswitch_send(const int, const char *, const SOCKET_DATA_LEN);
-int socksswitch_close(const int);
+void socksswitch_socket_init();
 
-int masterSocket(const int);
-int clientSocket(const char *, const int);
+SOCKET_SOCKET socksswitch_socket_accept(const SOCKET_SOCKET);
+int socksswitch_socket_recv(const SOCKET_SOCKET, char *);
+int socksswitch_socket_send(const SOCKET_SOCKET, const char *,
+			    const SOCKET_DATA_LEN);
+int socksswitch_socket_close(const SOCKET_SOCKET);
 
+const char *socksswitch_socket_addr(const SOCKET_SOCKET);
+SOCKET_SOCKET masterSocket(const unsigned int);
+SOCKET_SOCKET clientSocket(const char *, const int);
 const char *socketError();
 
 #endif				/* SOCKETS_H */

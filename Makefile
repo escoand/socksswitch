@@ -26,7 +26,7 @@ BINDIR    = bin
 INSTDIR   = $(ProgramFiles)/socksswitch/
 MAIN      = socksswitch
 DRV       = socksswitchdrv
-OBJS      = inject.o main.o match.o sockets.o socks.o ssh.o trace.o
+OBJS      = destination.o inject.o main.o request.o sockets.o ssh.o trace.o
 
 
 # windows config

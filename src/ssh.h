@@ -31,26 +31,16 @@
 #endif
 
 #include <libssh/libssh.h>
+#include "request.h"
 #include "sockets.h"
-#include "socks.h"
 
-typedef struct {
-    SOCKS_REQUEST *request;
-    SOCKET_DATA_LEN sock;
-    ssh_session session;
-    char host[256];
-    unsigned short port;
-    char user[128];
-    char keyfile[1024];
-} SSH_THREAD_DATA;
-
-int socksswitch_ssh_thread(void *params);
+int socksswitch_ssh_select(ssh_channel *, SOCKET_DATA_LEN);
 SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel *, char *);
-int socksswitch_ssh_send(ssh_channel *, const char *,
-			 const SOCKET_DATA_LEN);
+SOCKET_DATA_LEN socksswitch_ssh_send(ssh_channel *, const char *,
+				     const SOCKET_DATA_LEN);
+int socksswitch_ssh_connect(const char *, const int, const char *,
+			    const char *, ssh_session *);
 int socksswitch_ssh_close(ssh_channel *);
 
-int sshSocket(const char *, const int, const char *, const char *,
-	      const char *, ssh_session *);
 
 #endif				/* SSH_H */

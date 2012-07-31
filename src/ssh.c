@@ -26,8 +26,66 @@
 #include <errno.h>
 #endif
 #include <stdio.h>
+#include <time.h>
 #include "ssh.h"
 #include "trace.h"
+
+/* wrapper for socket and channel select */
+int socksswitch_ssh_select(ssh_channel * channel, SOCKET_DATA_LEN sock) {
+    int rc;
+    time_t start, end;
+    fd_set set;
+    struct timeval to;
+
+    DEBUG_ENTER;
+    TRACE_VERBOSE("waiting for data (socket:%i channel:%i)\n", sock,
+		  channel);
+
+    time(&start);
+    to.tv_sec = 0;
+    to.tv_usec = 100;
+
+    do {
+	FD_ZERO(&set);
+	FD_SET(sock, &set);
+
+	/* listening on channel */
+	rc = ssh_channel_poll(*channel, FALSE);
+
+	/* error */
+	if (rc == SSH_ERROR || rc == SSH_EOF) {
+	    DEBUG_LEAVE;
+	    return rc;
+	}
+
+	/* channel action */
+	else if (rc > 0)
+	    return 1;
+
+	/* listening on socket */
+	rc = select(sock + 1, &set, NULL, NULL, &to);
+
+	/* error */
+	if (rc < 0) {
+	    TRACE_VERBOSE("select (rc:%i err:%i): %s\n", rc,
+			  WSAGetLastError(), socketError());
+	    DEBUG_LEAVE;
+	    return rc;
+	}
+
+	/* socket action */
+	else if (rc > 0)
+	    return 2;
+
+	/* current time */
+	time(&end);
+    } while (difftime(end, start) <= 5);
+
+    TRACE_INFO("connection timed out (socket:%i channel:%i)\n", sock,
+	       channel);
+    DEBUG_LEAVE;
+    return SOCKET_ERROR;
+}
 
 /* wrapper for socket receiving */
 SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel * channel, char *buf) {
@@ -66,7 +124,7 @@ SOCKET_DATA_LEN socksswitch_ssh_recv(ssh_channel * channel, char *buf) {
 }
 
 /* wrapper for socket sending */
-int
+SOCKET_DATA_LEN
 socksswitch_ssh_send(ssh_channel * channel,
 		     const char *buf, const SOCKET_DATA_LEN len) {
     int rc = 0, bytessend = 0;
@@ -136,147 +194,11 @@ int socksswitch_ssh_close(ssh_channel * channel) {
     return rc;
 }
 
-int socksswitch_ssh_thread(void *params) {
-    int rc;
-    fd_set sockets_set, read_set;
-    ssh_channel channel[2], read_channel[2];
-    SSH_THREAD_DATA data;
-    SOCKS_REQUEST req;
-    char buf[SOCKET_DATA_MAX];
-
-    DEBUG_ENTER;
-    TRACE_VERBOSE("start thread\n");
-
-    memcpy(&data, params, sizeof(data));
-    memcpy(&req, data.request, sizeof(req));
-
-    TRACE_VERBOSE("connecting to %s:%i (session:%i)\n",
-		  data.host, data.port, data.session);
-
-    if (!ssh_is_connected(data.session)) {
-	TRACE_WARNING("session not connected (session:%i)\n",
-		      data.session);
-	DEBUG_LEAVE;
-	return 0;
-    }
-
-    DEBUG;
-
-    /* init */
-    FD_ZERO(&sockets_set);
-    FD_SET(data.sock, &sockets_set);
-    channel[0] = NULL;
-    channel[1] = NULL;
-
-    DEBUG;
-
-    /* create channel */
-    channel[0] = ssh_channel_new(data.session);
-    if (channel[0] == NULL) {
-	TRACE_WARNING
-	    ("failure on creating channel (session:%i err:%i): %s\n",
-	     data.session, ssh_get_error_code(data.session),
-	     ssh_get_error(data.session));
-
-	/* send feedback */
-	req.cmd = 0x01;
-	socksswitch_send(data.sock, (char *) &req, getSocksReqLen(&req));
-
-	/* exit */
-	socksswitch_close(data.sock);
-	DEBUG_LEAVE;
-	return 0;
-    }
-
-    /* send feedback */
-    req.cmd = 0x00;
-    socksswitch_send(data.sock, (char *) &req, getSocksReqLen(&req));
-
-    DEBUG;
-
-    /* connect */
-    if (ssh_channel_open_forward
-	(channel[0], data.host, data.port, "", 0) != SSH_OK) {
-	TRACE_WARNING
-	    ("failure on connect to %s:%i (session:%i err:%i): %s\n",
-	     data.host, data.port, data.session,
-	     ssh_get_error_code(data.session),
-	     ssh_get_error(data.session));
-	if (channel != NULL)
-	    ssh_channel_free(channel[0]);
-	DEBUG_LEAVE;
-	return 0;
-    }
-
-    DEBUG;
-
-    TRACE_INFO("connected to %s:%i (session:%i channel:%i)\n", data.host,
-	       data.port, data.session, channel[0]);
-
-    for (;;) {
-	memset(buf, 0, SOCKET_DATA_MAX);
-
-	DEBUG;
-
-	/* listening */
-	read_set = sockets_set;
-	rc = ssh_select(channel, read_channel, data.sock + 1, &read_set,
-			NULL);
-
-	DEBUG;
-
-	/* error */
-	if (rc == SSH_ERROR) {
-	    socksswitch_ssh_close(&channel[0]);
-	    //ssh_channel_free(channel[0]);
-	    socksswitch_close(data.sock);
-	    TRACE_VERBOSE("close thread\n");
-	    DEBUG_LEAVE;
-	    return 0;
-	}
-
-	/* channel action */
-	if (read_channel[0] != NULL) {
-	    rc = socksswitch_ssh_recv(&channel[0], buf);
-	    if (rc <= 0) {
-		socksswitch_ssh_close(&channel[0]);
-		//ssh_channel_free(channel[0]);
-		socksswitch_close(data.sock);
-		TRACE_VERBOSE("close thread\n");
-		DEBUG_LEAVE;
-		return 0;
-	    } else if (rc > 0)
-		socksswitch_send(data.sock, buf, rc);
-	}
-
-	DEBUG;
-
-	/* socket action */
-	if (FD_ISSET(data.sock, &read_set)) {
-	    rc = socksswitch_recv(data.sock, buf);
-	    if (rc <= 0) {
-		socksswitch_ssh_close(&channel[0]);
-		//ssh_channel_free(channel[0]);
-		socksswitch_close(data.sock);
-		TRACE_VERBOSE("close thread\n");
-		DEBUG_LEAVE;
-		return 0;
-	    } else if (rc > 0)
-		socksswitch_ssh_send(&channel[0], buf, rc);
-	}
-    }
-
-    TRACE_VERBOSE("close thread\n");
-    DEBUG_LEAVE;
-    return 1;
-}
-
 /* create and connect ssh socket */
 int
-sshSocket(const char *host, const int port,
-	  const char *username,
-	  const char *privkeyfile,
-	  const char *pubkeyfile, ssh_session * session) {
+socksswitch_ssh_connect(const char *host, const int port,
+			const char *username,
+			const char *privkeyfile, ssh_session * session) {
     int hlen;
     unsigned char *hash = NULL;
 
@@ -293,6 +215,7 @@ sshSocket(const char *host, const int port,
 	DEBUG_LEAVE;
 	return 0;
     }
+    //ssh_blocking_flush(*session, 2000);
 
     /* connect */
     ssh_options_set(*session, SSH_OPTIONS_HOST, host);

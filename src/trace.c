@@ -34,13 +34,14 @@
 void
 trace(const char *file, const int line, const char *function,
       enum TRACE_LEVEL level, const char *format, ...) {
-    const char *tl[] = { "", "ERROR", "WARNING", "INFO", "VERBOSE" };
+    const char *tl[] =
+	{ "DEBUG", "", "ERROR", "WARNING", "INFO", "VERBOSE" };
     FILE *output;
     char datestr[9], timestr[9], msg1[256], msg2[1025];
     va_list ap;
 
     /*  check if log needed */
-    if (getenv("TRACE") == NULL || level > atoi(getenv("TRACE")))
+    if (getenv("TRACE") == NULL || level > atoi(getenv("TRACE")) + 1)
 	return;
 
     /*  get date and time */
@@ -111,7 +112,7 @@ void trace_append(enum TRACE_LEVEL level, const char *format, ...) {
     va_list ap;
 
     /*  check if log needed */
-    if (getenv("TRACE") == NULL || level > atoi(getenv("TRACE")))
+    if (getenv("TRACE") == NULL || level > atoi(getenv("TRACE")) + 1)
 	return;
 
     /*  log to file */

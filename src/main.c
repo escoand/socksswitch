@@ -25,11 +25,11 @@
 #endif
 #include <stdio.h>
 #include <libssh/libssh.h>
+#include "destination.h"
 #include "inject.h"
 #include "main.h"
-#include "match.h"
+#include "request.h"
 #include "sockets.h"
-#include "socks.h"
 #include "ssh.h"
 #include "trace.h"
 
@@ -41,92 +41,69 @@
 #define FD_SET_DATA(set, i) __FDS_BITS(&set)[i]
 #endif
 
-#define SOCKSSWITCH_DRV "socksswitchdrv.dll"
-
-fd_set sockets_set, read_set;
-FORWARD_DESTINATION destinations[32];
-FORWARD_PAIR forwards[32];
-char captures[32][256];
-int destinations_count = 0;
-int captures_count = 0;
 char *cfgpath = NULL;
-char *dllpath = NULL;
+unsigned int masterport = 0;
 
 int main(int argc, char *argv[]) {
-    int rc;
-    unsigned int i, j, masterport, socket_max, newsock;
-    char buf[SOCKET_DATA_MAX], tmp[SOCKET_DATA_MAX];
-    FORWARD_DESTINATION *dst = NULL;
-    SSH_THREAD_DATA thread_data;
-    char dst_host[256];
-    struct timeval to;
-
-    to.tv_sec = 1;
-    to.tv_usec = 0;
+    int rc, i;
+    fd_set sockets_set, read_set;
+    SOCKET_DATA_LEN sock;
+    SOCKSSWITCH_THREAD_DATA thread_data;
+    FORWARD_DESTINATION *dest;
 
     /* default */
     putenv("TRACE=2");
-    dllpath = getcwd(dllpath, MAX_PATH);
-    strcat(dllpath, "\\socksswitchdrv.dll");
 
     /* read params and config */
     readParams(argc, argv);
-    masterport = readConfig();
+    readConfig();
 
     DEBUG;
 
-    /* try to read ddl file */
-    if (access(dllpath, 04) != 0) {
-	TRACE_ERROR("unable to read dll file \"%s\"\n", dllpath);
-	dllpath = NULL;
-    }
-
     /* init socket handling */
-    socksswitch_init();
+    socksswitch_socket_init();
     FD_ZERO(&sockets_set);
     FD_ZERO(&read_set);
-    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
-	forwards[i].type = 0;
-	forwards[i].left = 0;
-	forwards[i].right = 0;
-	forwards[i].channel = NULL;
-    }
 
     DEBUG;
 
     /* init master socket */
-    rc = masterSocket(masterport);
-    if (rc > 0) {
-	FD_SET(rc, &sockets_set);
-	socket_max = rc;
-    } else
+    sock = masterSocket(masterport);
+    if (sock > 0)
+	FD_SET(sock, &sockets_set);
+    else
 	return 1;
 
     DEBUG;
 
     /* init ssh connections */
-    for (i = 0; i < destinations_count; i++) {
-	if (strlen(destinations[i].user) > 0) {
+    i = 0;
+    dest = socksswitch_destination_get(i);
+    while (dest != NULL) {
+	if (strlen(dest->user) > 0) {
 	    ssh_session session = NULL;
-	    rc = sshSocket(destinations[i].host, destinations[i].port,
-			   destinations[i].user,
-			   destinations[i].privkeyfile,
-			   destinations[i].pubkeyfile, &session);
+	    TRACE_VERBOSE("##### host:%s port:%i\n",dest->host, dest->port);
+	    rc = socksswitch_ssh_connect(dest->host, dest->port,
+					 dest->user,
+					 dest->privkeyfile, &session);
 	    if (rc > 0) {
-		destinations[i].session = session;
+		dest->session = session;
 	    } else {
-		strcpy(destinations[i].host, "");
-		destinations[i].port = 0;
-		strcpy(destinations[i].user, "");
-		strcpy(destinations[i].privkeyfile, "");
-		strcpy(destinations[i].pubkeyfile, "");
-		destinations[i].session = NULL;
+		strcpy(dest->host, "");
+		dest->port = 0;
+		strcpy(dest->user, "");
+		strcpy(dest->privkeyfile, "");
+		dest->session = NULL;
 	    }
 	}
+	dest = socksswitch_destination_get(++i);
     }
 
     DEBUG;
 
+/* inject thread */
+    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)
+		 socksswitch_inject_thread, NULL, 0, NULL);
 
     /* main loop */
     for (;;) {
@@ -135,146 +112,26 @@ int main(int argc, char *argv[]) {
 
 	/* wait for socket actions */
 	read_set = sockets_set;
-	if (dllpath != NULL)
-	    rc = select(socket_max + 1, &read_set, NULL, NULL, &to);
-	else
-	    rc = select(socket_max + 1, &read_set, NULL, NULL, NULL);
-
-	DEBUG;
-
-	/* try to inject */
-	if (dllpath != NULL && FD_SET_SIZE(read_set) == 0) {
-	    for (i = 0; i < captures_count; i++)
-		socksswitch_inject(captures[i], dllpath);
-	    continue;
-	}
+	rc = select(sock + 1, &read_set, NULL, NULL, NULL);
+	TRACE_VERBOSE("select (rc:%i)\n", rc);
 
 	DEBUG;
 
 	/* master socket action */
-	if (FD_ISSET(FD_SET_DATA(sockets_set, 0), &read_set)) {
+	if (FD_ISSET(sock, &read_set)) {
+
+	    rc = socksswitch_socket_accept(sock);
+	    TRACE_VERBOSE("socksswitch_accept (rc:%i)\n", rc);
 
 	    DEBUG;
 
-	    rc = socksswitch_accept(FD_SET_DATA(sockets_set, 0));
-
-	    /* add new socket */
+	    /* new client thread */
 	    if (rc > 0) {
-		FD_SET(rc, &sockets_set);
-		if (rc > socket_max)
-		    socket_max = rc;
-	    }
-
-	    continue;
-	}
-
-	DEBUG;
-
-	/* client socket action */
-	for (i = 0; i < FD_SET_SIZE(read_set); i++) {
-
-	    /* skip empty */
-	    if (FD_SET_DATA(read_set, i) == 0)
-		continue;
-
-	    /* get new data */
-	    memset(buf, 0, SOCKET_DATA_MAX);
-	    rc = socksswitch_recv(FD_SET_DATA(read_set, i), buf);
-
-	    /* disconnected */
-	    if (rc == 0)
-		cleanEnd(FD_SET_DATA(read_set, i));
-
-	    /* socket closed or error */
-	    if (rc < 0) {
-		DEBUG;
-		cleanEnd(FD_SET_DATA(read_set, i));
-	    }
-
-	    /* socks5 handshake */
-	    else if ((rc == 3 && memcmp(buf, "\x05\x01\x00", 3) == 0)
-		     || (rc == 4
-			 && memcmp(buf, "\x05\x02\x00\x02", 4) == 0)) {
-		DEBUG;
-		rc = socksswitch_send(FD_SET_DATA(read_set, i),
-				      "\x05\x00", 2);
-		if (rc <= 0)
-		    cleanEnd(rc);
-	    }
-
-	    /* socks5 request */
-	    else if (rc > 3 && memcmp(buf, "\x05\x01\x00", 3) == 0) {
-
-		/* testing filters */
-		if (!matchFilter(&dst, buf, rc)) {
-		    DEBUG;
-		    cleanEnd(FD_SET_DATA(read_set, i));
-		    continue;
-		}
-
-		/* ssh forwarding */
-		if (dst->session != NULL) {
-		    DEBUG;
-		    memset(dst_host, 0, sizeof(dst_host));
-		    getSocksReqHost(dst_host, buf, rc);
-
-		    /* commit */
-		    FD_CLR(FD_SET_DATA(read_set, i), &sockets_set);
-
-		    /* connected */
-		    //memcpy(thread_data.request, buf, rc);
-		    thread_data.request = (SOCKS_REQUEST*) buf;
-		    thread_data.sock = FD_SET_DATA(read_set, i);
-		    thread_data.session = dst->session;
-		    strcpy(thread_data.host, dst_host);
-		    thread_data.port = getSocksReqPort(buf, rc);
-		    DEBUG;
-		    strcpy(thread_data.user, dst->user);
-		    DEBUG;
-		    strcpy(thread_data.keyfile, dst->privkeyfile);
-		    DEBUG;
-		    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)
-				 socksswitch_ssh_thread, &thread_data, 0,
-				 NULL);
-
-		    DEBUG;
-		}
-
-		/* direct forwarding */
-		else {
-		    DEBUG;
-		    newsock = clientSocket(dst->host, dst->port);
-
-		    /* connected */
-		    if (newsock > 0) {
-			DEBUG;
-
-			/* add new socket */
-			FD_SET(newsock, &sockets_set);
-			forwardsAdd(FORWARD_TYPE_DIRECT,
-				    FD_SET_DATA(read_set, i), newsock,
-				    NULL);
-
-			/* init connection */
-			if (socksswitch_send
-			    (newsock, "\x05\x01\x00", 3) > 0 &&
-			    socksswitch_recv(newsock, tmp) > 0)
-			    socksswitch_send(newsock, buf, rc);
-		    }
-
-		    /* error */
-		    else {
-			DEBUG;
-			cleanEnd(FD_SET_DATA(read_set, i));
-			cleanEnd(newsock);
-		    }
-		}
-	    }
-
-	    /* forwarding */
-	    else if (!forward(FD_SET_DATA(read_set, i), NULL, buf, rc)) {
-		DEBUG;
-		cleanEnd(FD_SET_DATA(read_set, i));
+		thread_data.sock = rc;
+		TRACE_INFO("starting new thread\n", rc);
+		CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)
+			     socksswitch_client_thread, &thread_data, 0,
+			     NULL);
 	    }
 	}
     }
@@ -307,7 +164,7 @@ void showHelp(char *binary) {
 /* read parameters */
 void readParams(const int argc, char *argv[]) {
     unsigned int i;
-    char tmp[1025];
+    char tmp[MAX_PATH + 1];
 
     /* read arguments */
     for (i = 1; i < argc; i++) {
@@ -335,11 +192,13 @@ void readParams(const int argc, char *argv[]) {
 	else if (strcmp(argv[i], "-D") == 0) {
 	    i++;
 	    if (strchr(argv[i], ':') == NULL) {
-		dllpath = getcwd(dllpath, MAX_PATH);
-		strcat(dllpath, "\\");
-		strcat(dllpath, argv[i]);
+		getcwd(tmp, MAX_PATH);
+		strcat(tmp, "\\");
+		strcat(tmp, argv[i]);
 	    } else
-		strcpy(dllpath, argv[i]);
+		strcpy(tmp, argv[i]);
+	    sprintf(tmp, "DLLPATH=%s", argv[i]);
+	    putenv(tmp);
 	}
 
 	/* tacelevel */
@@ -365,16 +224,18 @@ void readParams(const int argc, char *argv[]) {
 }
 
 /* read config file */
-int readConfig() {
+void readConfig() {
     FILE *cfgfile = NULL;
     char cfgline[1024];
     char cfgtype[256];
-    int rc, masterport = 0;
+    int rc;
+    FORWARD_DESTINATION dest;
 
     DEBUG_ENTER;
 
     if (cfgpath == NULL)
 	cfgpath = "socksswitch.cfg";
+    memset(&dest, 0, sizeof(dest));
 
     /* open config file */
     cfgfile = fopen(cfgpath, "r");
@@ -403,232 +264,52 @@ int readConfig() {
 	    int port;
 	    char user[32];
 	    char privkeyfile[256];
-	    char pubkeyfile[256];
+
+	    /* add destination */
+	    if (strlen(dest.host) > 0)
+		socksswitch_destination_add(dest);
+
+	    /* clean */
+	    memset(&dest, 0, sizeof(dest));
 
 	    /* read forward config */
 	    rc = sscanf(cfgline,
-			"%*s %s %i %s \"%[^\"]\" \"%[^\"]\"", host,
-			&port, user, pubkeyfile, privkeyfile);
+			"%*s %s %i %s \"%[^\"]\"", host,
+			&port, user, privkeyfile);
 	    if (rc > 0) {
-		strcpy(destinations[destinations_count].host, host);
-		destinations[destinations_count].port = port;
+		strcpy(dest.host, host);
+		dest.port = port;
 	    }
 	    if (rc == 2) {
-		strcpy(destinations[destinations_count].user, "");
-		strcpy(destinations[destinations_count].privkeyfile, "");
-		strcpy(destinations[destinations_count].pubkeyfile, "");
-	    } else if (rc == 5) {
-		strcpy(destinations[destinations_count].user, user);
-		strcpy(destinations[destinations_count].privkeyfile,
-		       privkeyfile);
-		strcpy(destinations[destinations_count].pubkeyfile,
-		       pubkeyfile);
+		strcpy(dest.user, "");
+		strcpy(dest.privkeyfile, "");
+	    } else if (rc == 4) {
+		strcpy(dest.user, user);
+		strcpy(dest.privkeyfile, privkeyfile);
 	    }
-	    destinations_count++;
 	}
 
 	/* get filter rules */
 	else if (strcmp(cfgtype, "filter") == 0) {
 	    char filter[256] = "";
 	    rc = sscanf(cfgline, "%*s %s", filter);
-	    strcpy(destinations[destinations_count - 1].filters
-		   [destinations
-		    [destinations_count - 1].filters_count++], filter);
+	    strcpy(dest.filters[dest.filters_count++], filter);
 	}
 
 	/* get capture file */
-	else if (strcmp(cfgtype, "capture") == 0)
-	    sscanf(cfgline, "%*s \"%[^\"]\"", captures[captures_count++]);
+	else if (strcmp(cfgtype, "capture") == 0) {
+	    char path[MAX_PATH + 1] = "";
+	    sscanf(cfgline, "%*s \"%[^\"]\"", path);
+	    socksswitch_inject_add(path);
+	}
     }
+
+    /* add destination */
+    if (strlen(dest.host) > 0)
+	socksswitch_destination_add(dest);
 
     /* close config file */
     fclose(cfgfile);
-
-    DEBUG_LEAVE;
-    return masterport;
-}
-
-/* get matching destination */
-int matchFilter(FORWARD_DESTINATION ** fo, const char *buf, const int len) {
-    unsigned int i, j;
-    char host[256] = "";
-
-    DEBUG_ENTER;
-
-    getSocksReqHost(host, buf, len);
-    for (i = 0; i < destinations_count; i++)
-	for (j = 0; j < destinations[i].filters_count; j++)
-	    if (*destinations[i].filters[j] == '!' &&
-		matching(host, destinations[i].filters[j])) {
-		("request %s:%i matches neg filter %s for %s:%i\n",
-		 host, getSocksReqPort(buf, len),
-		 destinations[i].filters[j],
-		 destinations[i].host, destinations[i].port);
-		return 0;
-	    } else if (matching(host, destinations[i].filters[j])) {
-		TRACE_INFO
-		    ("request %s:%i matches filter %s for %s:%i\n",
-		     host, getSocksReqPort(buf, len),
-		     destinations[i].filters[j],
-		     destinations[i].host, destinations[i].port);
-		*fo = &destinations[i];
-		return 1;
-	    }
-
-    TRACE_WARNING("request %s:%i matches no filter\n",
-		  host, getSocksReqPort(buf, len));
-
-    DEBUG_LEAVE;
-    return 0;
-}
-
-/* add partners to forward list */
-int forwardsAdd(FORWARD_TYPE type, const int left,
-		const int sock, ssh_channel * channel) {
-    unsigned int i;
-
-    DEBUG_ENTER;
-
-    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
-	if (forwards[i].left == 0) {
-	    forwards[i].type = type;
-	    forwards[i].left = left;
-	    forwards[i].right = sock;
-	    if (channel != NULL) {
-		forwards[i].channel = *channel;
-		TRACE_VERBOSE
-		    ("forward added (socket:%i channel:%i)\n",
-		     left, *channel);
-	    } else
-		TRACE_VERBOSE
-		    ("forward added (socket:%i socket:%i)\n", left, sock);
-	    return 1;
-	}
-    }
-
-    TRACE_WARNING("too much forwards\n");
-
-    DEBUG_LEAVE;
-    return 0;
-}
-
-/* find a partner to forward data */
-int forward(const int sock, ssh_channel * channel,
-	    const char *buf, const int len) {
-    unsigned int i;
-
-    DEBUG_ENTER;
-
-    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
-
-	/* from local to direct */
-	if (sock > 0
-	    && forwards[i].type == FORWARD_TYPE_DIRECT
-	    && forwards[i].left == sock) {
-
-	    TRACE_VERBOSE
-		("forward to remote (socket:%i to socket:%i)\n",
-		 forwards[i].left, forwards[i].right);
-	    if (socksswitch_send(forwards[i].right, buf, len)
-		<= 0)
-		cleanEnd(sock);
-	    DEBUG_LEAVE;
-	    return 1;
-	}
-
-	/* from local to ssh */
-	else if (sock > 0
-		 && forwards[i].type == FORWARD_TYPE_SSH
-		 && forwards[i].left == sock) {
-
-	    TRACE_VERBOSE
-		("forward to remote (socket:%i to channel:%i)\n",
-		 forwards[i].left, forwards[i].channel);
-	    socksswitch_ssh_send(&forwards[i].channel, buf, len);
-	    DEBUG_LEAVE;
-	    return 1;
-	}
-
-	/* from direct to local */
-	else if (sock > 0
-		 && forwards[i].type == FORWARD_TYPE_DIRECT
-		 && forwards[i].right == sock) {
-
-	    TRACE_VERBOSE
-		("forward to local (socket:%i to socket:%i)\n",
-		 forwards[i].right, forwards[i].left);
-	    if (socksswitch_send(forwards[i].left, buf, len) <= 0)
-		cleanEnd(sock);
-	    DEBUG_LEAVE;
-	    return 1;
-	}
-
-	/* from ssh to local */
-	else if (channel != NULL
-		 && forwards[i].type == FORWARD_TYPE_SSH
-		 && forwards[i].channel == *channel) {
-
-	    TRACE_VERBOSE
-		("forward to local (channel:%i to socket:%i)\n",
-		 forwards[i].channel, forwards[i].left);
-	    if (socksswitch_send(forwards[i].left, buf, len) <= 0)
-		cleanEnd(sock);
-	    DEBUG_LEAVE;
-	    return 1;
-	}
-    }
-
-    TRACE_VERBOSE("no forward (socket:%i channel:%i)\n", sock, channel);
-
-    DEBUG_LEAVE;
-    return 0;
-}
-
-/* clean shutdown of sockets */
-void cleanEnd(const int sock) {
-    unsigned int i;
-
-    DEBUG_ENTER;
-
-    if (sock <= 0) {
-	DEBUG_LEAVE;
-	return;
-    }
-
-    /* disconnect forwardings */
-    for (i = 0; i < sizeof(forwards) / sizeof(forwards[0]); i++) {
-	if (forwards[i].left == sock || forwards[i].right == sock) {
-
-	    /* close sockets */
-	    if (sock != forwards[i].left && sock > 0) {
-		FD_CLR(forwards[i].left, &sockets_set);
-		FD_CLR(forwards[i].left, &read_set);
-		socksswitch_close(forwards[i].left);
-	    }
-	    if (sock != forwards[i].right && sock > 0) {
-		FD_CLR(forwards[i].right, &sockets_set);
-		FD_CLR(forwards[i].right, &read_set);
-		socksswitch_close(forwards[i].right);
-	    }
-	    if (forwards[i].channel != NULL)
-		socksswitch_ssh_close(&forwards[i].channel);
-
-	    /* clear forwards */
-	    forwards[i].type = FORWARD_TYPE_NONE;
-	    forwards[i].left = 0;
-	    forwards[i].right = 0;
-	    forwards[i].channel = NULL;
-	}
-    }
-
-    DEBUG;
-
-    /* disconnect unforwarded */
-    if (FD_ISSET(sock, &sockets_set)) {
-	FD_CLR(sock, &sockets_set);
-	FD_CLR(sock, &read_set);
-	socksswitch_close(sock);
-    }
 
     DEBUG_LEAVE;
 }

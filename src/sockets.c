@@ -33,7 +33,7 @@
 #include "trace.h"
 
 /* init winsock */
-void socksswitch_init() {
+void socksswitch_socket_init() {
 #ifdef WIN32
     WORD wVersionRequested;
     WSADATA wsaData;
@@ -52,7 +52,7 @@ void socksswitch_init() {
 }
 
 /* get socket address */
-const char *socksswitch_addr(const int sock) {
+const char *socksswitch_socket_addr(const SOCKET_SOCKET sock) {
     struct sockaddr_in addr;
     SOCKET_ADDR_LEN addrlen = sizeof(struct sockaddr_in);
     char *addrstr;
@@ -71,7 +71,7 @@ const char *socksswitch_addr(const int sock) {
 }
 
 /* wrapper for socket accpeting */
-int socksswitch_accept(const int sock) {
+SOCKET_SOCKET socksswitch_socket_accept(const SOCKET_SOCKET sock) {
     SOCKET_ADDR_LEN addrlen = sizeof(struct sockaddr_in);
     struct sockaddr_in addr;
     int rc;
@@ -98,7 +98,7 @@ int socksswitch_accept(const int sock) {
 }
 
 /* wrapper for socket receiving */
-SOCKET_DATA_LEN socksswitch_recv(const int sock, char *buf) {
+int socksswitch_socket_recv(const SOCKET_SOCKET sock, char *buf) {
     int rc = 0;
 
     DEBUG_ENTER;
@@ -114,26 +114,27 @@ SOCKET_DATA_LEN socksswitch_recv(const int sock, char *buf) {
     if (rc > 0) {
 	TRACE_VERBOSE
 	    ("recv from %s (socket:%i length:%i)\n",
-	     socksswitch_addr(sock), sock, rc);
+	     socksswitch_socket_addr(sock), sock, rc);
 	DUMP(buf, rc);
     }
 
     /* socket closed */
 #ifdef WIN32
-    else if (rc == 0 || SOCKET_ERROR_CODE == WSAECONNRESET) {
+    else if (rc == 0 || SOCKET_ERROR_CODE == WSAECONNRESET)
 #else
-    else if (rc == 0) {
+    else if (rc == 0)
 #endif
+    {
 	TRACE_VERBOSE
 	    ("recv disconnect from %s (socket:%i)\n",
-	     socksswitch_addr(sock), sock);
+	     socksswitch_socket_addr(sock), sock);
     }
 
     /* error */
     else {
 	TRACE_WARNING
 	    ("failure on receiving from %s (socket:%i err:%i): %s\n",
-	     socksswitch_addr(sock), sock, SOCKET_ERROR_CODE,
+	     socksswitch_socket_addr(sock), sock, SOCKET_ERROR_CODE,
 	     socketError());
 	socketError();
 	DEBUG_LEAVE;
@@ -146,8 +147,8 @@ SOCKET_DATA_LEN socksswitch_recv(const int sock, char *buf) {
 
 /* wrapper for socket sending */
 int
-socksswitch_send(const int sock,
-		 const char *buf, const SOCKET_DATA_LEN len) {
+socksswitch_socket_send(const SOCKET_SOCKET sock,
+			const char *buf, const SOCKET_DATA_LEN len) {
     int rc = 0, bytessend = 0;
     fd_set write_set;
     struct timeval to;
@@ -168,18 +169,18 @@ socksswitch_send(const int sock,
 
 	/* check if ready */
 	/*TRACE_VERBOSE("wait for ready for sending (sock:%i)\n", sock);
-	rc = select(sock + 1, NULL, &write_set, NULL, NULL);
-	if (rc == 0) {
-	    TRACE_WARNING("socket not ready for writing (sock:%i)\n",
-			  sock);
-	    return -1;
-	}
-	else if(rc < 0) {
-	    TRACE_WARNING
-		("failure on waiting for writing (sock:%i err:%i): %s\n",
-		 sock, SOCKET_ERROR_CODE, socketError());
-	    return -1;
-	}*/
+	   rc = select(sock + 1, NULL, &write_set, NULL, NULL);
+	   if (rc == 0) {
+	   TRACE_WARNING("socket not ready for writing (sock:%i)\n",
+	   sock);
+	   return -1;
+	   }
+	   else if(rc < 0) {
+	   TRACE_WARNING
+	   ("failure on waiting for writing (sock:%i err:%i): %s\n",
+	   sock, SOCKET_ERROR_CODE, socketError());
+	   return -1;
+	   } */
 
 	rc = send(sock, buf + bytessend, len - bytessend, 0);
 
@@ -187,7 +188,7 @@ socksswitch_send(const int sock,
 	if (rc <= 0) {
 	    TRACE_WARNING
 		("failure on sending to %s (socket:%i: err:%i): %s\n",
-		 socksswitch_addr(sock), sock, SOCKET_ERROR_CODE,
+		 socksswitch_socket_addr(sock), sock, SOCKET_ERROR_CODE,
 		 socketError());
 	    socketError();
 	    DEBUG_LEAVE;
@@ -200,7 +201,7 @@ socksswitch_send(const int sock,
     if (rc >= 0) {
 	TRACE_VERBOSE
 	    ("send to %s (socket:%i length:%i rc:%i)\n",
-	     socksswitch_addr(sock), sock, len, rc);
+	     socksswitch_socket_addr(sock), sock, len, rc);
 	DUMP(buf, len);
     }
 
@@ -209,7 +210,7 @@ socksswitch_send(const int sock,
 }
 
 /* wrapper for socket closing */
-int socksswitch_close(const int sock) {
+int socksswitch_socket_close(const SOCKET_SOCKET sock) {
     char addrstr[256];
 
     DEBUG_ENTER;
@@ -219,7 +220,7 @@ int socksswitch_close(const int sock) {
 	return 0;
     }
 
-    strcpy(addrstr, socksswitch_addr(sock));
+    strcpy(addrstr, socksswitch_socket_addr(sock));
 
     /* disconnect */
     if (shutdown(sock, SD_BOTH) == 0 && SOCKET_CLOSE(sock) == 0)
@@ -239,7 +240,7 @@ int socksswitch_close(const int sock) {
 }
 
 /* create and bind master socket */
-int masterSocket(const int port) {
+SOCKET_SOCKET masterSocket(const unsigned int port) {
     int rc;
     struct sockaddr_in addr;
 
@@ -296,7 +297,7 @@ int masterSocket(const int port) {
 }
 
 /* create and connect client socket */
-int clientSocket(const char *host, const int port) {
+SOCKET_SOCKET clientSocket(const char *host, const int port) {
     int rc, sock;
     struct sockaddr_in addr;
 
@@ -335,8 +336,8 @@ int clientSocket(const char *host, const int port) {
 	return 0;
     }
 
-    TRACE_INFO("connected to %s (socket:%i)\n", socksswitch_addr(sock),
-	       sock);
+    TRACE_INFO("connected to %s (socket:%i)\n",
+	       socksswitch_socket_addr(sock), sock);
 
     DEBUG_LEAVE;
     return sock;

@@ -26,6 +26,41 @@
 #include "inject.h"
 #include "trace.h"
 
+char captures[32][MAX_PATH + 1];
+int captures_count = 0;
+
+void socksswitch_inject_add(char *path) {
+    captures[captures_count++];
+}
+
+void socksswitch_inject_thread(void *params) {
+    unsigned int i;
+    char dllpath[MAX_PATH + 1];
+
+    /*  get ddl path */
+    if (getenv("DLLPATH") != NULL)
+	strcpy(dllpath, getenv("DLLPATH"));
+    else {
+	getcwd(dllpath, MAX_PATH);
+	strcat(dllpath, "\\socksswitchdrv.dll");
+    }
+
+    /* try to read ddl file */
+    if (access(dllpath, 04) != 0) {
+	TRACE_ERROR("unable to read dll file \"%s\"\n", dllpath);
+	return;
+    }
+
+    while (TRUE) {
+
+	/* try to inject dll */
+	for (i = 0; i < captures_count; i++)
+	    socksswitch_inject(captures[i], dllpath);
+
+	Sleep(1000);
+    }
+}
+
 int socksswitch_inject(char *path, const char *dll) {
     char *filename;
     PROCESSENTRY32 pe;

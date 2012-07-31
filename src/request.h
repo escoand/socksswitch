@@ -24,12 +24,6 @@
 
 typedef struct {
     unsigned char ver;
-    unsigned char nmethods;
-    unsigned char methods[];
-} SOCKS5_HANDSHAKE;
-
-typedef struct {
-    unsigned char ver;
     unsigned char cmd;
     union {
 	struct {
@@ -53,8 +47,8 @@ typedef struct {
     } data;
 } SOCKS_REQUEST;
 
-void getSocksReqHost(char *host, const char *buf, const int len);
-unsigned short getSocksReqPort(const char *buf, const int len);
-int getSocksReqLen(const SOCKS_REQUEST *req);
+void socksswitch_request_host(char *host, const char *buf, const int len);
+unsigned short socksswitch_request_port(const char *buf, const int len);
+int socksswitch_request_length(const SOCKS_REQUEST * req);
 
 #endif				/* SOCKS_H */

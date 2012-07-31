@@ -19,6 +19,6 @@
  */
 
 
-#include <windows.h>
-
+void socksswitch_inject_add(char *);
+void socksswitch_inject_thread(void *);
 int socksswitch_inject(char *, const char *);

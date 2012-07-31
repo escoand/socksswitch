@@ -19,10 +19,6 @@
  */
 
 
-#include <stdio.h>
-#include "socks.h"
-#include "trace.h"
-
 #ifdef WIN32
 #include <winsock.h>
 #else
@@ -30,9 +26,12 @@
 #include <string.h>
 #include <arpa/inet.h>
 #endif
+#include <stdio.h>
+#include "request.h"
+#include "trace.h"
 
 /* return destination host of socks request */
-void getSocksReqHost(char *host, const char *buf, const int len) {
+void socksswitch_request_host(char *host, const char *buf, const int len) {
     SOCKS_REQUEST *req;
 
     DEBUG_ENTER;
@@ -88,7 +87,7 @@ void getSocksReqHost(char *host, const char *buf, const int len) {
 }
 
 /* return destination port of socks request */
-unsigned short getSocksReqPort(const char *buf, const int len) {
+unsigned short socksswitch_request_port(const char *buf, const int len) {
     SOCKS_REQUEST *req;
     unsigned short port = 0;
 
@@ -132,7 +131,7 @@ unsigned short getSocksReqPort(const char *buf, const int len) {
 }
 
 /* return the length of th socks request */
-int getSocksReqLen(const SOCKS_REQUEST * req) {
+int socksswitch_request_length(const SOCKS_REQUEST * req) {
     /* socks4 */
     if (req->ver == 4)
 	return 9;
