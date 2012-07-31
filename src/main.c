@@ -82,10 +82,11 @@ int main(int argc, char *argv[]) {
     while (dest != NULL) {
 	if (strlen(dest->user) > 0) {
 	    ssh_session session = NULL;
-	    TRACE_VERBOSE("##### host:%s port:%i\n",dest->host, dest->port);
+	    TRACE_VERBOSE("##### host:%s port:%i\n", dest->host,
+			  dest->port);
 	    rc = socksswitch_ssh_connect(dest->host, dest->port,
-					 dest->user,
-					 dest->privkeyfile, &session);
+					 dest->user, dest->privkeyfile,
+					 &session);
 	    if (rc > 0) {
 		dest->session = session;
 	    } else {

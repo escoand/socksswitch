@@ -53,7 +53,7 @@ typedef struct {
 } SOCKSSWITCH_THREAD_DATA;
 
 void socksswitch_client_thread(void *);
-FORWARD_DESTINATION* socksswitch_destination_get(const int);
+FORWARD_DESTINATION *socksswitch_destination_get(const int);
 void socksswitch_destination_add(FORWARD_DESTINATION);
 int socksswitch_destination_match(FORWARD_DESTINATION **, const char *,
 				  const int);

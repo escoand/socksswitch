@@ -275,9 +275,9 @@ void socksswitch_client_thread(void *params) {
     return;
 }
 
-FORWARD_DESTINATION * socksswitch_destination_get(const int i) {
+FORWARD_DESTINATION *socksswitch_destination_get(const int i) {
     if (i <= destinations_count) {
-	return (FORWARD_DESTINATION *)&destinations[i];
+	return (FORWARD_DESTINATION *) & destinations[i];
     }
     return NULL;
 }
